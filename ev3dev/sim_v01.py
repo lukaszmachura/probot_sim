@@ -153,7 +153,7 @@ class Motor:
 
         rC, ini_wheel_pos = vrep.simxGetJointPosition(
             self.kwargs['clientID'], self.kwargs.get('motor'),
-            vrep.simx_opmode_oneshot)
+            vrep.simx_opmode_streaming)
 
         wheel_pos = ini_wheel_pos
         while wheel_pos - ini_wheel_pos < math.radians(position_sp):
@@ -162,12 +162,12 @@ class Motor:
             # vrep.simxPauseCommunication(self.kwargs['clientID'], True)
 
             errorCode = vrep.simxSetJointTargetVelocity(self.kwargs['clientID'],
-                    self.kwargs['motor'], speed_sp, vrep.simx_opmode_oneshot)
+                    self.kwargs['motor'], speed_sp, vrep.simx_opmode_streaming)
             errorCode = vrep.simxSetJointForce(self.kwargs['clientID'],
-                    self.kwargs['motor'], self.kwargs['MOTION_TORQUE'], vrep.simx_opmode_oneshot)
+                    self.kwargs['motor'], self.kwargs['MOTION_TORQUE'], vrep.simx_opmode_streaming)
             # positions of a wheel
             errorCode, wheel_pos = vrep.simxGetJointPosition(self.kwargs['clientID'],
-                    self.kwargs['motor'], vrep.simx_opmode_oneshot)
+                    self.kwargs['motor'], vrep.simx_opmode_streaming)
 
             # vrep.simxPauseCommunication(self.kwargs['clientID'], False)
 
