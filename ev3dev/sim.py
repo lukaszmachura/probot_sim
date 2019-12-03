@@ -151,6 +151,8 @@ class Motor:
         if VERBOSE:
             print("Partly implemented.")
 
+        # rC = vrep.simxSetJointPosition(self.kwargs['clientID'], self.kwargs.get('motor'), 0, vrep.simx_opmode_oneshot)
+
         rC, ini_wheel_pos = vrep.simxGetJointPosition(
             self.kwargs['clientID'], self.kwargs.get('motor'),
             vrep.simx_opmode_oneshot)
@@ -162,20 +164,20 @@ class Motor:
             # vrep.simxPauseCommunication(self.kwargs['clientID'], True)
 
             errorCode = vrep.simxSetJointTargetVelocity(self.kwargs['clientID'],
-                    self.kwargs['motor'], speed_sp, vrep.simx_opmode_oneshot)
+                    self.kwargs.get('motor'), speed_sp, vrep.simx_opmode_oneshot)
             errorCode = vrep.simxSetJointForce(self.kwargs['clientID'],
-                    self.kwargs['motor'], self.kwargs['MOTION_TORQUE'], vrep.simx_opmode_oneshot)
+                    self.kwargs.get('motor'), self.kwargs['MOTION_TORQUE'], vrep.simx_opmode_oneshot)
             # positions of a wheel
             errorCode, wheel_pos = vrep.simxGetJointPosition(self.kwargs['clientID'],
-                    self.kwargs['motor'], vrep.simx_opmode_oneshot)
+                    self.kwargs.get('motor'), vrep.simx_opmode_oneshot)
 
             # vrep.simxPauseCommunication(self.kwargs['clientID'], False)
 
         # full stop
         errorCode = vrep.simxSetJointTargetVelocity(self.kwargs['clientID'],
-                self.kwargs['motor'], 0, vrep.simx_opmode_blocking)
+                self.kwargs.get('motor'), 0, vrep.simx_opmode_blocking)
         errorCode = vrep.simxSetJointForce(self.kwargs['clientID'],
-                self.kwargs['motor'], self.kwargs['REST_TORQUE'], vrep.simx_opmode_blocking)
+                self.kwargs.get('motor'), self.kwargs['REST_TORQUE'], vrep.simx_opmode_blocking)
 
         # vrep.simxFinish(self.kwargs['clientID'])
 
@@ -197,7 +199,7 @@ class LargeMotor(Motor):
         super(LargeMotor, self).__init__(address, **kwargs)
 
 
-class MoveTank:
+class MoveTank(LargeMotor):
     """
     Controls a pair of motors simultaneously, via individual speed setpoints for each motor.
     Example:
@@ -214,12 +216,25 @@ class MoveTank:
         }
 
         #TODO: MotorSet.__init__(self, motor_specs, desc)
-        self.left_motor = self.motors[left_motor_port]
-        self.right_motor = self.motors[right_motor_port]
-        self.max_speed = self.left_motor.max_speed
+        self.left_motor = LargeMotor(left_motor_port)
+        self.right_motor = LargeMotor(right_motor_port)
 
-        # color sensor used by follow_line()
-        self.cs = None
+    def on_for_degrees(self, left_speed, right_speed, degrees, brake=True, block=True):
+        errorCode = vrep.simxPauseCommunication(clientID, not True)
+        self.left_motor.run_to_rel_pos(degrees, left_speed)
+        self.right_motor.run_to_rel_pos(degrees, right_speed)
+        errorCode = vrep.simxPauseCommunication(clientID, False)
+
+    def on_for_rotations(self, left_speed, right_speed, rotations, brake=True, block=True):
+        """
+        Rotate the motors at 'left_speed & right_speed' for 'rotations'. Speeds
+        can be percentages or any SpeedValue implementation.
+        If the left speed is not equal to the right speed (i.e., the robot will
+        turn), the motor on the outside of the turn will rotate for the full
+        ``rotations`` while the motor on the inside will have its requested
+        distance calculated according to the expected turn.
+        """
+        MoveTank.on_for_degrees(self, left_speed, right_speed, rotations * 360, brake, block)
 
 
 # vrep simulation init
