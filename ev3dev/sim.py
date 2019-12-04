@@ -179,9 +179,6 @@ class Motor:
             # and iteration < 10:
             iteration += 1
 
-            # wait for both motors
-            # vrep.simxPauseCommunication(self.kwargs['clientID'], True)
-
             errorCodeJTV = vrep.simxSetJointTargetVelocity(self.kwargs['clientID'],
                     self.kwargs.get('motor'), speed_sp, vrep.simx_opmode_streaming) #oneshot)
             errorCodeSJF = vrep.simxSetJointForce(self.kwargs['clientID'],
@@ -190,23 +187,16 @@ class Motor:
             # positions of a wheel
             errorCodeP, wheel_pos = vrep.simxGetJointPosition(self.kwargs['clientID'],
                     self.kwargs.get('motor'), vrep.simx_opmode_oneshot)
-                    #buffer)
 
-            # if errorCodeP == vrep.simx_return_novalue_flag:  # or errorCodeP == vrep.simx_return_ok:
-            #     time(20)
-            #     wheel_pos = buf
-
-            # vrep.simxPauseCommunication(self.kwargs['clientID'], False)
-            print("{}. ini:{} wheel:{} pos:{} speed:{}".format(iteration, ini_wheel_pos, wheel_pos, position_sp_rad, speed_sp))
-            print("ERRORS: vel:{} pos:{} force:{} init:{}".format(errorCodeJTV, errorCodeP, errorCodeSJF, rC))
+            if VERBOSE:
+                print("{}. ini:{} wheel:{} pos:{} speed:{}".format(iteration, ini_wheel_pos, wheel_pos, position_sp_rad, speed_sp))
+                print("ERRORS: vel:{} pos:{} force:{} init:{}".format(errorCodeJTV, errorCodeP, errorCodeSJF, rC))
 
         # full stop
         errorCode = vrep.simxSetJointTargetVelocity(self.kwargs['clientID'],
                 self.kwargs.get('motor'), 0, vrep.simx_opmode_blocking)
-        # errorCode = vrep.simxSetJointForce(self.kwargs['clientID'],
-        #         self.kwargs.get('motor'), self.kwargs['REST_TORQUE'], vrep.simx_opmode_blocking)
-
-        # vrep.simxFinish(self.kwargs['clientID'])
+        errorCode = vrep.simxSetJointForce(self.kwargs['clientID'],
+                self.kwargs.get('motor'), self.kwargs['REST_TORQUE'], vrep.simx_opmode_blocking)
 
         return wheel_pos
 
