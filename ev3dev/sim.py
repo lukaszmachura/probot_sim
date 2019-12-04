@@ -160,18 +160,32 @@ class Motor:
         self.kwargs['handle'] = motor
         self.kwargs['motor'] = motor
 
+        if 'state' in self.kwargs:
+            self.state = self.kwargs.get('state')
+        else:
+            self.kwargs['state'] = 'break'
+
+    def run_forever(speed_sp=0):
+        while self.kwargs.get('state') == 'run':
+            errorCodeJTV = vrep.simxSetJointTargetVelocity(self.kwargs['clientID'],
+                    self.kwargs.get('motor'), speed_sp, vrep.simx_opmode_streaming) #oneshot_wait)
+            errorCodeSJF = vrep.simxSetJointForce(self.kwargs['clientID'],
+                    self.kwargs.get('motor'), self.kwargs['MOTION_TORQUE'], vrep.simx_opmode_streaming)
+        return 0
+
     def run_to_rel_pos(self, position_sp, speed_sp):
         if VERBOSE:
             print("Partly implemented.")
 
-        # rC = vrep.simxSetJointPosition(self.kwargs['clientID'], self.kwargs.get('motor'), 0, vrep.simx_opmode_oneshot)
 
+        # wait (10-20ms) for robot to send back the data...
         rC = 1
         while rC != vrep.simx_error_noerror:
             rC, ini_wheel_pos = vrep.simxGetJointPosition(
                 self.kwargs['clientID'], self.kwargs.get('motor'),
                 vrep.simx_opmode_oneshot)
 
+        # an actuall motion
         iteration = 0
         wheel_pos = ini_wheel_pos
         position_sp_rad = math.radians(position_sp)
@@ -180,9 +194,9 @@ class Motor:
             iteration += 1
 
             errorCodeJTV = vrep.simxSetJointTargetVelocity(self.kwargs['clientID'],
-                    self.kwargs.get('motor'), speed_sp, vrep.simx_opmode_streaming) #oneshot)
+                    self.kwargs.get('motor'), speed_sp, vrep.simx_opmode_streaming) #oneshot_wait)
             errorCodeSJF = vrep.simxSetJointForce(self.kwargs['clientID'],
-                    self.kwargs.get('motor'), self.kwargs['MOTION_TORQUE'], vrep.simx_opmode_streaming) #oneshot)
+                    self.kwargs.get('motor'), self.kwargs['MOTION_TORQUE'], vrep.simx_opmode_streaming) #oneshot_wait)
 
             # positions of a wheel
             errorCodeP, wheel_pos = vrep.simxGetJointPosition(self.kwargs['clientID'],
@@ -237,7 +251,7 @@ class MoveTank(LargeMotor):
         self.right_motor = LargeMotor(right_motor_port)
 
     def on_for_degrees(self, left_speed, right_speed, degrees, brake=True, block=True):
-        errorCode = vrep.simxPauseCommunication(clientID, not True)
+        errorCode = vrep.simxPauseCommunication(clientID, True)
         self.left_motor.run_to_rel_pos(degrees, left_speed)
         self.right_motor.run_to_rel_pos(degrees, right_speed)
         errorCode = vrep.simxPauseCommunication(clientID, False)
