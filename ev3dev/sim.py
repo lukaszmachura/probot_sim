@@ -7,6 +7,7 @@
 import vrep
 import sys
 import math
+import time
 
 from collections import OrderedDict
 
@@ -19,6 +20,18 @@ if VERBOSE:
 
 def finish(sig=-1):
     vrep.simxFinish(sig)
+
+
+def restart_simulation():
+    if "clientID" in globals():  # global question
+        print("global ID")
+    else:
+        print("connecting...")
+        global clientID
+        clientID = connection()
+
+    vrep.simxStopSimulation(clientID, vrep.simx_opmode_oneshot)
+    vrep.simxStartSimulation(clientID, vrep.simx_opmode_oneshot)
 
 
 def connection(connectionAddress='127.0.0.1',
@@ -153,31 +166,45 @@ class Motor:
 
         # rC = vrep.simxSetJointPosition(self.kwargs['clientID'], self.kwargs.get('motor'), 0, vrep.simx_opmode_oneshot)
 
-        rC, ini_wheel_pos = vrep.simxGetJointPosition(
-            self.kwargs['clientID'], self.kwargs.get('motor'),
-            vrep.simx_opmode_oneshot)
+        rC = 1
+        while rC != vrep.simx_error_noerror:
+            rC, ini_wheel_pos = vrep.simxGetJointPosition(
+                self.kwargs['clientID'], self.kwargs.get('motor'),
+                vrep.simx_opmode_oneshot)
 
+        iteration = 0
         wheel_pos = ini_wheel_pos
-        while wheel_pos - ini_wheel_pos < math.radians(position_sp):
+        position_sp_rad = math.radians(position_sp)
+        while wheel_pos - ini_wheel_pos <= position_sp_rad:
+            # and iteration < 10:
+            iteration += 1
 
             # wait for both motors
             # vrep.simxPauseCommunication(self.kwargs['clientID'], True)
 
-            errorCode = vrep.simxSetJointTargetVelocity(self.kwargs['clientID'],
-                    self.kwargs.get('motor'), speed_sp, vrep.simx_opmode_oneshot)
-            errorCode = vrep.simxSetJointForce(self.kwargs['clientID'],
-                    self.kwargs.get('motor'), self.kwargs['MOTION_TORQUE'], vrep.simx_opmode_oneshot)
+            errorCodeJTV = vrep.simxSetJointTargetVelocity(self.kwargs['clientID'],
+                    self.kwargs.get('motor'), speed_sp, vrep.simx_opmode_streaming) #oneshot)
+            errorCodeSJF = vrep.simxSetJointForce(self.kwargs['clientID'],
+                    self.kwargs.get('motor'), self.kwargs['MOTION_TORQUE'], vrep.simx_opmode_streaming) #oneshot)
+
             # positions of a wheel
-            errorCode, wheel_pos = vrep.simxGetJointPosition(self.kwargs['clientID'],
+            errorCodeP, wheel_pos = vrep.simxGetJointPosition(self.kwargs['clientID'],
                     self.kwargs.get('motor'), vrep.simx_opmode_oneshot)
+                    #buffer)
+
+            # if errorCodeP == vrep.simx_return_novalue_flag:  # or errorCodeP == vrep.simx_return_ok:
+            #     time(20)
+            #     wheel_pos = buf
 
             # vrep.simxPauseCommunication(self.kwargs['clientID'], False)
+            print("{}. ini:{} wheel:{} pos:{} speed:{}".format(iteration, ini_wheel_pos, wheel_pos, position_sp_rad, speed_sp))
+            print("ERRORS: vel:{} pos:{} force:{} init:{}".format(errorCodeJTV, errorCodeP, errorCodeSJF, rC))
 
         # full stop
         errorCode = vrep.simxSetJointTargetVelocity(self.kwargs['clientID'],
                 self.kwargs.get('motor'), 0, vrep.simx_opmode_blocking)
-        errorCode = vrep.simxSetJointForce(self.kwargs['clientID'],
-                self.kwargs.get('motor'), self.kwargs['REST_TORQUE'], vrep.simx_opmode_blocking)
+        # errorCode = vrep.simxSetJointForce(self.kwargs['clientID'],
+        #         self.kwargs.get('motor'), self.kwargs['REST_TORQUE'], vrep.simx_opmode_blocking)
 
         # vrep.simxFinish(self.kwargs['clientID'])
 
