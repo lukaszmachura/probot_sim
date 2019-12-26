@@ -1,15 +1,22 @@
 import ev3dev.sim as ev3
 
 
+
+
 tank = ev3.MoveTank("Motor_B", "Motor_C")
 mB = ev3.LargeMotor("Motor_B")
 
+g = ev3.GyroSensor()
+print(g)
+
 for i in [1, 2, 3, 4]:
     # forward
-    tank.on_for_degrees(1, 1, 20)
+    tank.on_for_degrees(1, 1, 5)
 
     # turn
-    mB.run_to_rel_pos(360, 1)
+    mB.run_to_rel_pos(5, 1)
+
+    print(g.value())
 
 
 # mC = ev3.LargeMotor("Motor_C")
