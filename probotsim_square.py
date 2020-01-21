@@ -16,7 +16,7 @@ for i in [1, 2, 3, 4]:
     # turn
     mB.run_to_rel_pos(5, 1)
 
-    print(g.value())
+    print("Gyro Sensor", g.value())
 
 
 # mC = ev3.LargeMotor("Motor_C")

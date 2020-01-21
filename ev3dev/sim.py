@@ -14,7 +14,7 @@ from collections import OrderedDict
 
 
 CONNECT = not True
-VERBOSE = True
+VERBOSE = not True
 if VERBOSE:
     print("vrep imported")
 
@@ -458,11 +458,13 @@ class MoveTank(LargeMotor):
         factor = 1
         for deg in range(degrees * factor):
             errorCode = vrep.simxPauseCommunication(clientID, not True)
-            print("PauseComm Przed:", errorCode)
+            if VERBOSE:
+                print("PauseComm Przed:", errorCode)
             self.left_motor.run_to_rel_pos(1 / factor, left_speed)
             self.right_motor.run_to_rel_pos(1 / factor, right_speed)
             errorCode = vrep.simxPauseCommunication(clientID, False)
-            print("PauseComm Po:", errorCode)
+            if VERBOSE:
+                print("PauseComm Po:", errorCode)
 
     def a(self):
         if VERBOSE:
@@ -570,7 +572,9 @@ class GyroSensor(Sensor):
     LEGO EV3 gyro sensor.
     """
 
-    VREP_GYRO_NAME = 'GyroSensor_reference_G'
+    VREP_GYRO_NAME = 'Giroscopio'
+    # VREP_GYRO_NAME = 'GyroSensor_reference_G'
+    # VREP_GYRO_NAME = 'GyroSensor_reference'
 
     # vrep
     def __init__(self, **kwargs):
@@ -579,7 +583,8 @@ class GyroSensor(Sensor):
         if "clientID" in self.kwargs:  # local preference
             self.clientID = self.kwargs['clientID']
         elif "clientID" in globals():  # global question
-            print("global ID")
+            if VERBOSE:
+                print("global ID")
             self.clientID = clientID
             self.kwargs['clientID'] = clientID
         else:
@@ -591,11 +596,31 @@ class GyroSensor(Sensor):
                     GyroSensor.VREP_GYRO_NAME,
                     vrep.simx_opmode_oneshot_wait)
 
+        if VERBOSE:
+            print("GyroError, GyroCodeNr", errorCode, self.gyro)
+
     def __str__(self):
         return str(self.gyro)
 
     def value(self):
-        return vrep.simxgetObjectMatrix(self.gyro, -1)
+        rC = 1
+        # while rC != vrep.simx_error_noerror:
+        if 1:
+            rC, signalValue = vrep.simxGetFloatSignal(
+                self.kwargs.get('clientID'),
+                GyroSensor.VREP_GYRO_NAME,
+                vrep.simx_opmode_buffer
+            )
+
+            # this works only in Ceppelia
+            # matrix = vrep.simxGetObjectMatrix(
+            #     self.gyro,
+            #     -1,
+            #     vrep.simxServiceCall
+            # )
+
+        # return vrep.simxgetObjectMatrix(self.gyro, -1)
+        return rC, signalValue  #, matrix
 
     # oldTransformationMatrix=sim.getObjectMatrix(ref,-1)
 
