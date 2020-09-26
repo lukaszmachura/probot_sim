@@ -4,6 +4,11 @@
 # not yet specified whether we use self or kwargs (it is somehow both now)
 #
 
+"""
+.. _Google Python Style Guide:
+   http://google.github.io/styleguide/pyguide.html
+"""
+
 import vrep
 import sys
 import math
@@ -14,12 +19,13 @@ from collections import OrderedDict
 
 
 CONNECT = not True
-VERBOSE = not True
+VERBOSE = True
 if VERBOSE:
     print("vrep imported")
 
 
 def finish(sig=-1):
+    "wrapper for vrep command"
     vrep.simxFinish(sig)
 
 
@@ -48,7 +54,7 @@ def connection(connectionAddress='127.0.0.1',
     if dummy:
         return 666
 
-    vrep.simxFinish(-1)
+    finish(-1)  #wrapper for vrep.simxFinish
     clientID = vrep.simxStart(connectionAddress,
                     connectionPort,
                     waitUntilConnected,
@@ -68,9 +74,13 @@ def connection(connectionAddress='127.0.0.1',
 
 class SpeedValue(object):
     """
-    A base class for other unit types. Don't use this directly; instead, see
-    :class:`SpeedPercent`, :class:`SpeedRPS`, :class:`SpeedRPM`,
-    :class:`SpeedDPS`, and :class:`SpeedDPM`.
+    A base class for other unit types.
+    Don't use this directly; instead, see
+    :class:`SpeedPercent`,
+    :class:`SpeedRPS`,
+    :class:`SpeedRPM`,
+    :class:`SpeedDPS`, and
+    :class:`SpeedDPM`.
     """
 
     def __eq__(self, other):
@@ -102,7 +112,8 @@ class SpeedPercent(SpeedValue):
 
     def __init__(self, percent):
         assert -100 <= percent <= 100,\
-            "{} is an invalid percentage, must be between -100 and 100 (inclusive)".format(percent)
+            f"{percent} is an invalid percentage, must be between \
+             -100 and 100 (inclusive)"
 
         self.percent = percent
 
@@ -110,7 +121,8 @@ class SpeedPercent(SpeedValue):
         return str(self.percent) + "%"
 
     def __mul__(self, other):
-        assert isinstance(other, (float, int)), "{} can only be multiplied by an int or float".format(self)
+        assert isinstance(other, (float, int)), \
+            f"{self} can only be multiplied by an int or float"
         return SpeedPercent(self.percent * other)
 
     def to_native_units(self, motor):
@@ -132,7 +144,8 @@ class SpeedNativeUnits(SpeedValue):
         return "{:.2f}".format(self.native_counts) + " counts/sec"
 
     def __mul__(self, other):
-        assert isinstance(other, (float, int)), "{} can only be multiplied by an int or float".format(self)
+        assert isinstance(other, (float, int)), \
+            f"{self} can only be multiplied by an int or float"
         return SpeedNativeUnits(self.native_counts * other)
 
     def to_native_units(self, motor=None):
@@ -154,17 +167,20 @@ class SpeedRPS(SpeedValue):
         return str(self.rotations_per_second) + " rot/sec"
 
     def __mul__(self, other):
-        assert isinstance(other, (float, int)), "{} can only be multiplied by an int or float".format(self)
+        assert isinstance(other, (float, int)), \
+            f"{self} can only be multiplied by an int or float"
         return SpeedRPS(self.rotations_per_second * other)
 
     def to_native_units(self, motor):
         """
-        Return the native speed measurement required to achieve desired rotations-per-second
+        Return the native speed measurement required to achieve
+        desired rotations-per-second
         """
         assert abs(self.rotations_per_second) <= motor.max_rps,\
-            "invalid rotations-per-second: {} max RPS is {}, {} was requested".format(
-            motor, motor.max_rps, self.rotations_per_second)
-        return self.rotations_per_second/motor.max_rps * motor.max_speed
+            f"invalid rotations-per-second: \
+            {motor} max RPS is {motor.max_rps}, \
+            {self.rotations_per_second} was requested"
+        return self.rotations_per_second / motor.max_rps * motor.max_speed
 
 
 class SpeedRPM(SpeedValue):
@@ -179,17 +195,20 @@ class SpeedRPM(SpeedValue):
         return str(self.rotations_per_minute) + " rot/min"
 
     def __mul__(self, other):
-        assert isinstance(other, (float, int)), "{} can only be multiplied by an int or float".format(self)
+        assert isinstance(other, (float, int)), \
+        f"{self} can only be multiplied by an int or float"
         return SpeedRPM(self.rotations_per_minute * other)
 
     def to_native_units(self, motor):
         """
-        Return the native speed measurement required to achieve desired rotations-per-minute
+        Return the native speed measurement required to achieve
+        desired rotations-per-minute
         """
         assert abs(self.rotations_per_minute) <= motor.max_rpm,\
-            "invalid rotations-per-minute: {} max RPM is {}, {} was requested".format(
+            "invalid rotations-per-minute: {} max RPM is {}, {} \
+            was requested".format(
             motor, motor.max_rpm, self.rotations_per_minute)
-        return self.rotations_per_minute/motor.max_rpm * motor.max_speed
+        return self.rotations_per_minute / motor.max_rpm * motor.max_speed
 
 
 class SpeedDPS(SpeedValue):
@@ -204,17 +223,20 @@ class SpeedDPS(SpeedValue):
         return str(self.degrees_per_second) + " deg/sec"
 
     def __mul__(self, other):
-        assert isinstance(other, (float, int)), "{} can only be multiplied by an int or float".format(self)
+        assert isinstance(other, (float, int)), \
+        "{} can only be multiplied by an int or float".format(self)
         return SpeedDPS(self.degrees_per_second * other)
 
     def to_native_units(self, motor):
         """
-        Return the native speed measurement required to achieve desired degrees-per-second
+        Return the native speed measurement required to achieve
+        desired degrees-per-second
         """
         assert abs(self.degrees_per_second) <= motor.max_dps,\
-            "invalid degrees-per-second: {} max DPS is {}, {} was requested".format(
+            "invalid degrees-per-second: {} max DPS is {}, {} \
+            was requested".format(
             motor, motor.max_dps, self.degrees_per_second)
-        return self.degrees_per_second/motor.max_dps * motor.max_speed
+        return self.degrees_per_second / motor.max_dps * motor.max_speed
 
 
 class SpeedDPM(SpeedValue):
@@ -229,42 +251,59 @@ class SpeedDPM(SpeedValue):
         return str(self.degrees_per_minute) + " deg/min"
 
     def __mul__(self, other):
-        assert isinstance(other, (float, int)), "{} can only be multiplied by an int or float".format(self)
+        assert isinstance(other, (float, int)), \
+        "{} can only be multiplied by an int or float".format(self)
         return SpeedDPM(self.degrees_per_minute * other)
 
     def to_native_units(self, motor):
         """
-        Return the native speed measurement required to achieve desired degrees-per-minute
+        Return the native speed measurement required to achieve
+        desired degrees-per-minute
         """
         assert abs(self.degrees_per_minute) <= motor.max_dpm,\
-            "invalid degrees-per-minute: {} max DPM is {}, {} was requested".format(
+            "invalid degrees-per-minute: {} max DPM is {}, {} \
+            was requested".format(
             motor, motor.max_dpm, self.degrees_per_minute)
-        return self.degrees_per_minute/motor.max_dpm * motor.max_speed
-
+        return self.degrees_per_minute / motor.max_dpm * motor.max_speed
 
 
 class MotorSet(object):
+    """
+    The MotorSet object is a parent class for collection of Lego motors
 
-    def __init__(self, motor_specs, desc=None):
-        """
-        motor_specs is a dictionary such as
+    Args:
+        motor_specs (dict):
         {
             OUTPUT_A : LargeMotor,
             OUTPUT_C : LargeMotor,
         }
-        """
+        desc (str, optional): contains description of the motors
+
+    Attributes:
+        motors (ordered dict): containes motors' names and descriptions
+        desc (str): contains description of the motors
+    """
+
+    def __init__(self, motor_specs, desc=None):
+
         self.motors = OrderedDict()
+        # actual port names
         for motor_port in sorted(motor_specs.keys()):
             motor_class = motor_specs[motor_port]
             self.motors[motor_port] = motor_class(motor_port)
             self.motors[motor_port].reset()
 
+        # left/right wheel
+        for motor_port in desc:
+            self.motors[motor_port] = self.motors[desc[motor_port]]
         self.desc = desc
 
     def __str__(self):
-
         if self.desc:
-            return self.desc
+            if isinstance(self.desc, str):
+                return self.desc
+            else:
+                return str(self.desc)
         else:
             return self.__class__.__name__
 
@@ -277,15 +316,18 @@ class MotorSet(object):
                     try:
                         setattr(motor, key, kwargs[key])
                     except AttributeError as e:
-                        #log.error("%s %s cannot set %s to %s" % (self, motor, key, kwargs[key]))
+                        # log.error("%s %s cannot set %s to %s" % (self, motor,
+                        #           key, kwargs[key]))
                         raise e
 
     def set_polarity(self, polarity, motors=None):
         pass
-        # valid_choices = (LargeMotor.POLARITY_NORMAL, LargeMotor.POLARITY_INVERSED)
+        # valid_choices = (LargeMotor.POLARITY_NORMAL,
+        #                  LargeMotor.POLARITY_INVERSED)
         #
         # assert polarity in valid_choices,\
-        #     "%s is an invalid polarity choice, must be %s" % (polarity, ', '.join(valid_choices))
+        #     "%s is an invalid polarity choice, must be %s" % (polarity,
+        #      ', '.join(valid_choices))
         # motors = motors if motors is not None else self.motors.values()
         #
         # for motor in motors:
@@ -306,7 +348,8 @@ class MotorSet(object):
 
 class Motor:
     """Motor class"""
-    ev3def = {'MOTION_TORQUE': 0.2,
+    ev3def = {
+              'MOTION_TORQUE': 0.2,
               'REST_TORQUE': 0.4,
               'MAX_SPEED': 18.326,
               }
@@ -318,6 +361,10 @@ class Motor:
             self.kwargs['address'] = address
         self.kwargs.update(Motor.ev3def)
         self.address = address
+
+        if 'max_speed' not in self.kwargs:
+            self.kwargs['max_speed'] = Motor.ev3def['MAX_SPEED']
+        self.max_speed = self.kwargs['max_speed']
 
         if "clientID" in self.kwargs:  # local preference
             self.clientID = self.kwargs['clientID']
@@ -343,31 +390,45 @@ class Motor:
         else:
             self.kwargs['state'] = 'break'
 
+    def initialize_motor(self):
+        # wait (10-20ms) for robot to send back the data...
+        rC = 1
+        while rC != vrep.simx_error_noerror:
+            rC, ini_wheel_pos = vrep.simxGetJointPosition(
+                self.kwargs['clientID'],
+                self.kwargs.get('motor'),
+                vrep.simx_opmode_oneshot)
+
+        return rC, ini_wheel_pos
+
     def run_forever(speed_sp=0):
         print("Not implemented")
         pass
 
         step = 1
         while self.kwargs.get('state') == 'run':
-            errorCodeJTV = vrep.simxSetJointTargetVelocity(self.kwargs['clientID'],
-                    self.kwargs.get('motor'), speed_sp, vrep.simx_opmode_streaming) #oneshot_wait)
-            errorCodeSJF = vrep.simxSetJointForce(self.kwargs['clientID'],
-                    self.kwargs.get('motor'), self.kwargs['MOTION_TORQUE'], vrep.simx_opmode_streaming)
-            errorCodeP, wheel_pos = vrep.simxGetJointPosition(self.kwargs['clientID'],
-                    self.kwargs.get('motor'), vrep.simx_opmode_oneshot)
+            errorCodeJTV = vrep.simxSetJointTargetVelocity(
+                    self.kwargs['clientID'],
+                    self.kwargs.get('motor'),
+                    speed_sp, vrep.simx_opmode_streaming) #oneshot_wait)
+            errorCodeSJF = vrep.simxSetJointForce(
+                    self.kwargs['clientID'],
+                    self.kwargs.get('motor'), self.kwargs['MOTION_TORQUE'],
+                    vrep.simx_opmode_streaming)
+            errorCodeP, wheel_pos = vrep.simxGetJointPosition(
+                    self.kwargs['clientID'],
+                    self.kwargs.get('motor'),
+                    vrep.simx_opmode_oneshot)
         return 0
 
-    def run_to_rel_pos(self, position_sp, speed_sp):
+    def run_to_rel_pos(self, position_sp, speed_sp, **kwargs):
         if VERBOSE:
-            print("Partly implemented.")
+            print(f"{__class__.__name__}.run_to_rel_pos: Partly implemented.")
 
+        speed_sp = self._speed_native_units(speed_sp)
 
         # wait (10-20ms) for robot to send back the data...
-        rC = 1
-        while rC != vrep.simx_error_noerror:
-            rC, ini_wheel_pos = vrep.simxGetJointPosition(
-                self.kwargs['clientID'], self.kwargs.get('motor'),
-                vrep.simx_opmode_oneshot)
+        rC, ini_wheel_pos = self.initialize_motor()
 
         # an actuall motion
         iteration = 0
@@ -377,30 +438,59 @@ class Motor:
             # and iteration < 10:
             iteration += 1
 
-            errorCodeJTV = vrep.simxSetJointTargetVelocity(self.kwargs['clientID'],
-                    self.kwargs.get('motor'), speed_sp, vrep.simx_opmode_streaming) #oneshot_wait)
+            errorCodeJTV = vrep.simxSetJointTargetVelocity(
+                self.kwargs['clientID'],
+                self.kwargs.get('motor'),
+                speed_sp,
+                vrep.simx_opmode_streaming) #oneshot_wait)
             errorCodeSJF = vrep.simxSetJointForce(self.kwargs['clientID'],
-                    self.kwargs.get('motor'), self.kwargs['MOTION_TORQUE'], vrep.simx_opmode_streaming) #oneshot_wait)
-
+                self.kwargs.get('motor'),
+                self.kwargs['MOTION_TORQUE'],
+                vrep.simx_opmode_streaming) #oneshot_wait)
             # positions of a wheel
-            errorCodeP, wheel_pos = vrep.simxGetJointPosition(self.kwargs['clientID'],
-                    self.kwargs.get('motor'), vrep.simx_opmode_oneshot)
+            errorCodeP, wheel_pos = vrep.simxGetJointPosition(
+                self.kwargs['clientID'],
+                self.kwargs.get('motor'),
+                vrep.simx_opmode_oneshot)
 
             if VERBOSE:
-                print("{}. ini:{} wheel:{} pos:{} speed:{}".format(iteration, ini_wheel_pos, wheel_pos, position_sp_rad, speed_sp))
-                print("ERRORS: vel:{} pos:{} force:{} init:{}".format(errorCodeJTV, errorCodeP, errorCodeSJF, rC))
+                print("{}. ini:{} wheel:{} pos:{} speed:{}".format(
+                    iteration, ini_wheel_pos,
+                    wheel_pos, position_sp_rad,
+                    speed_sp))
+                print("ERRORS: vel:{} pos:{} force:{} init:{}".format(
+                    errorCodeJTV, errorCodeP,
+                    errorCodeSJF, rC))
 
         # full stop
-        errorCode = vrep.simxSetJointTargetVelocity(self.kwargs['clientID'],
-                self.kwargs.get('motor'), 0, vrep.simx_opmode_blocking)
-        errorCode = vrep.simxSetJointForce(self.kwargs['clientID'],
-                self.kwargs.get('motor'), self.kwargs['REST_TORQUE'], vrep.simx_opmode_blocking)
+        errorCode = vrep.simxSetJointTargetVelocity(
+            self.kwargs['clientID'],
+            self.kwargs.get('motor'),
+            0,
+            vrep.simx_opmode_blocking)
+        errorCode = vrep.simxSetJointForce(
+            self.kwargs['clientID'],
+            self.kwargs.get('motor'),
+            self.kwargs['REST_TORQUE'],
+            vrep.simx_opmode_blocking)
 
         return wheel_pos
 
+    def _speed_native_units(self, speed, label=None):
+        # If speed is not a SpeedValue object we treat it as a percentage
+        if not isinstance(speed, SpeedValue):
+            assert -100 <= speed <= 100,\
+                "{}{} is an invalid speed percentage, must \
+                be between -100 and 100 (inclusive)".format(
+                "" if label is None else (label + ": ") , speed)
+            speed = SpeedPercent(speed)
+
+        return speed.to_native_units(self)
+
     def __str__(self):
         if 'address' in self.kwargs:
-            return "%s(%s)" % (self.__class__.__name__, self.kwargs.get('address'))
+            return "%s(%s)" % (self.__class__.__name__,
+                self.kwargs.get('address'))
         else:
             return "A" + self.__class__.__name__
 
@@ -413,10 +503,15 @@ class LargeMotor(Motor):
     def __init__(self, address=None, **kwargs):
         super(LargeMotor, self).__init__(address, **kwargs)
 
+    def reset(self):
+        'dummy function for now'
+        pass
 
-class MoveTank(LargeMotor):
+
+class MoveTank: #(LargeMotor):
     """
-    Controls a pair of motors simultaneously, via individual speed setpoints for each motor.
+    Controls a pair of motors simultaneously, via individual speed setpoints
+    for each motor.
     Example:
     .. code:: python
         tank_drive = MoveTank(OUTPUT_A, OUTPUT_B)
@@ -424,90 +519,64 @@ class MoveTank(LargeMotor):
         tank_drive.on_for_rotations(50, 75, 10)
     """
 
-    def __init__(self, left_motor_port, right_motor_port, desc=None, motor_class=LargeMotor):
+    def __init__(self, left_motor_port, right_motor_port,
+                 desc=None, motor_class=LargeMotor):
         motor_specs = {
             left_motor_port : motor_class,
             right_motor_port : motor_class,
         }
+        if desc is None:
+            desc = {
+                'Left motor port': left_motor_port,
+                'Right motor port': right_motor_port,
+            }
 
-        #TODO: MotorSet.__init__(self, motor_specs, desc)
-        self.left_motor = LargeMotor(left_motor_port)
-        self.right_motor = LargeMotor(right_motor_port)
-
-
-    def _speed_native_units(self, speed, label=None):
-        # If speed is not a SpeedValue object we treat it as a percentage
-        if not isinstance(speed, SpeedValue):
-            assert -100 <= speed <= 100,\
-                "{}{} is an invalid speed percentage, must be between -100 and 100 (inclusive)".format("" if label is None else (label + ": ") , speed)
-            speed = SpeedPercent(speed)
-
-        return speed.to_native_units(self)
+        MotorSet.__init__(self, motor_specs, desc)
 
     def _unpack_speeds_to_native_units(self, left_speed, right_speed):
-        left_speed = self.left_motor._speed_native_units(left_speed, "left_speed")
-        right_speed = self.right_motor._speed_native_units(right_speed, "right_speed")
+        left_speed = self.motors['Left motor port']._speed_native_units(
+            left_speed, "left_speed")
+        right_speed = self.motors['Right motor port']._speed_native_units(
+            right_speed, "right_speed")
 
         return (
             left_speed,
             right_speed
         )
 
-    def on_for_degrees(self, left_speed, right_speed, degrees, brake=True, block=True):
+    def on_for_degrees(self,
+            left_speed, right_speed, degrees,
+            brake=True, block=True):
+
+        if brake is not True:
+            print(f'{__class__.__name__} break not implemented')
+
+        if block is not True:
+            print(f'{__class__.__name__} break not implemented')
+
+        print(left_speed, right_speed)
+        left_speed, right_speed = self._unpack_speeds_to_native_units(
+            left_speed, right_speed
+        )
+        print(left_speed, right_speed)
+        assert False
 
         factor = 1
         for deg in range(degrees * factor):
             errorCode = vrep.simxPauseCommunication(clientID, not True)
             if VERBOSE:
                 print("PauseComm Przed:", errorCode)
-            self.left_motor.run_to_rel_pos(1 / factor, left_speed)
-            self.right_motor.run_to_rel_pos(1 / factor, right_speed)
+            self.motors['Left motor port'].run_to_rel_pos(
+                1 / factor, left_speed)
+            self.motors['Right motor port'].run_to_rel_pos(
+                1 / factor, right_speed)
             errorCode = vrep.simxPauseCommunication(clientID, False)
             if VERBOSE:
                 print("PauseComm Po:", errorCode)
+        return errorCode
 
-    def a(self):
-        if VERBOSE:
-            print("Partly implemented.")
-
-
-        # wait (10-20ms) for robot to send back the data...
-        rC = 1
-        while rC != vrep.simx_error_noerror:
-            rC, ini_wheel_pos = vrep.simxGetJointPosition(
-                self.kwargs['clientID'], self.kwargs.get('motor'),
-                vrep.simx_opmode_oneshot)
-
-        # an actuall motion
-        iteration = 0
-        wheel_pos = ini_wheel_pos
-        position_sp_rad = math.radians(position_sp)
-        while wheel_pos - ini_wheel_pos <= position_sp_rad:
-            # and iteration < 10:
-            iteration += 1
-
-            errorCodeJTV = vrep.simxSetJointTargetVelocity(self.kwargs['clientID'],
-                    self.kwargs.get('motor'), speed_sp, vrep.simx_opmode_streaming) #oneshot_wait)
-            errorCodeSJF = vrep.simxSetJointForce(self.kwargs['clientID'],
-                    self.kwargs.get('motor'), self.kwargs['MOTION_TORQUE'], vrep.simx_opmode_streaming) #oneshot_wait)
-
-            # positions of a wheel
-            errorCodeP, wheel_pos = vrep.simxGetJointPosition(self.kwargs['clientID'],
-                    self.kwargs.get('motor'), vrep.simx_opmode_oneshot)
-
-            if VERBOSE:
-                print("{}. ini:{} wheel:{} pos:{} speed:{}".format(iteration, ini_wheel_pos, wheel_pos, position_sp_rad, speed_sp))
-                print("ERRORS: vel:{} pos:{} force:{} init:{}".format(errorCodeJTV, errorCodeP, errorCodeSJF, rC))
-
-        # full stop
-        errorCode = vrep.simxSetJointTargetVelocity(self.kwargs['clientID'],
-                self.kwargs.get('motor'), 0, vrep.simx_opmode_blocking)
-        errorCode = vrep.simxSetJointForce(self.kwargs['clientID'],
-                self.kwargs.get('motor'), self.kwargs['REST_TORQUE'], vrep.simx_opmode_blocking)
-
-        return wheel_pos
-
-    def on_for_rotations(self, left_speed, right_speed, rotations, brake=True, block=True):
+    def on_for_rotations(self, left_speed, right_speed,
+                         rotations, brake=True, block=True):
         """
         Rotate the motors at 'left_speed & right_speed' for 'rotations'. Speeds
         can be percentages or any SpeedValue implementation.
@@ -516,7 +585,8 @@ class MoveTank(LargeMotor):
         ``rotations`` while the motor on the inside will have its requested
         distance calculated according to the expected turn.
         """
-        MoveTank.on_for_degrees(self, left_speed, right_speed, rotations * 360, brake, block)
+        MoveTank.on_for_degrees(self, left_speed, right_speed,
+            rotations * 360, brake, block)
 
 
 # -----------------------------------------------------------------------------
@@ -532,10 +602,8 @@ class Device(object):
         'kwargs',
     ]
 
-    DEVICE_ROOT_PATH = '/sys/class'
-
-    _DEVICE_INDEX = re.compile(r'^.*(\d+)$')
-
+    # DEVICE_ROOT_PATH = '/sys/class'
+    # _DEVICE_INDEX = re.compile(r'^.*(\d+)$')
     # to be implemented
 
 
@@ -573,7 +641,9 @@ class GyroSensor(Sensor):
     """
 
     VREP_GYRO_NAME = 'Giroscopio'
+    # VREP_GYRO_NAME = 'GyroSensor_G'
     # VREP_GYRO_NAME = 'GyroSensor_reference_G'
+    # VREP_GYRO_NAME = 'GyroSensor_VA'
     # VREP_GYRO_NAME = 'GyroSensor_reference'
 
     # vrep
@@ -592,9 +662,17 @@ class GyroSensor(Sensor):
             # print("Need clientID")
             # sys.exit("No client")
 
-        errorCode, self.gyro = vrep.simxGetObjectHandle(self.kwargs.get('clientID'),
-                    GyroSensor.VREP_GYRO_NAME,
-                    vrep.simx_opmode_oneshot_wait)
+        if "gyroName" in self.kwargs:
+            self.VREP_GYRO_NAME = self.kwargs.get('gyroName')
+        else:
+            self.kwargs['gyroName'] = self.VREP_GYRO_NAME
+
+        # object handle
+        errorCode, self.gyro = vrep.simxGetObjectHandle(
+            self.kwargs.get('clientID'),
+            # GyroSensor.VREP_GYRO_NAME,
+            self.VREP_GYRO_NAME,
+            vrep.simx_opmode_oneshot_wait)
 
         if VERBOSE:
             print("GyroError, GyroCodeNr", errorCode, self.gyro)
@@ -602,13 +680,16 @@ class GyroSensor(Sensor):
     def __str__(self):
         return str(self.gyro)
 
+    def __repr__(self):
+        return self.__str__()
+
     def value(self):
         rC = 1
         # while rC != vrep.simx_error_noerror:
         if 1:
             rC, signalValue = vrep.simxGetFloatSignal(
                 self.kwargs.get('clientID'),
-                GyroSensor.VREP_GYRO_NAME,
+                self.VREP_GYRO_NAME,
                 vrep.simx_opmode_buffer
             )
 
@@ -620,7 +701,8 @@ class GyroSensor(Sensor):
             # )
 
         # return vrep.simxgetObjectMatrix(self.gyro, -1)
-        return rC, signalValue  #, matrix
+        return rC, signalValue,\
+            self.VREP_GYRO_NAME, self.kwargs.get('gyroName')  #, matrix
 
     # oldTransformationMatrix=sim.getObjectMatrix(ref,-1)
 
