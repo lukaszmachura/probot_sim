@@ -19,7 +19,7 @@ from collections import OrderedDict
 
 
 CONNECT = not True
-VERBOSE = True
+VERBOSE = not True
 if VERBOSE:
     print("vrep imported")
 
@@ -30,7 +30,7 @@ def finish(sig=-1):
 
 
 def restart_simulation():
-    if "clientID" in globals():  # global question
+    if ("clientID" in globals()) and VERBOSE:  # global question
         print("global ID")
     else:
         print("connecting...")
@@ -267,6 +267,83 @@ class SpeedDPM(SpeedValue):
         return self.degrees_per_minute / motor.max_dpm * motor.max_speed
 
 
+class Wheel:
+    """
+    Wheel
+
+    Args:
+        radius (float)
+        width (float)
+        **kwargs (dict): note, that named args have precedence over kwargs
+
+    Attributes:
+        radius:
+
+    """
+    def __init__(self, radius=None, width=None, **kwargs):
+        self.kwargs = kwargs
+        self.radius = radius
+        self.width = width
+        self.circumference = None
+
+    @property
+    def radius(self):
+        return self._radius
+
+    @radius.setter
+    def radius(self, var):
+        assert isinstance(var, (int, float))
+        self._radius = var
+
+    @property
+    def width(self):
+        return self._width
+
+    @width.setter
+    def width(self, var):
+        assert isinstance(var, (int, float))
+        self._width = var
+
+    @property
+    def circumference(self):
+        return self._circumference
+
+    @circumference.setter
+    def circumference(self, var):
+        from math import pi
+        self._circumference = 2 * pi * self.radius
+
+    def __str__(self):
+        if 'description' not in self.kwargs:
+            ret = f"Wheel of radius {self.radius} "
+            ret += f"and cicrumference {self.circumference}"
+        else:
+            ret = str(self.kwargs['description'])
+        return ret
+
+    def __repr__(self):
+        return self.__str__()
+
+
+class LegoWheel_41896c04(Wheel):
+    """
+    Standard Lego Wheel and Tire assembly 41896c04
+
+    Wheel 43.2mm D. x 26mm Technic Racing Small,
+    3 Pin Holes with Black Tire 56 x 28 ZR Street (41896 / 41897)
+    """
+    diameter = 56
+    width = 28
+    units = 'mm'
+
+    def __init__(self):
+        super().__init__(
+            radius=__class__.diameter / 2,
+            width=__class__.width,
+            units=__class__.units
+        )
+
+
 class MotorSet(object):
     """
     The MotorSet object is a parent class for collection of Lego motors
@@ -351,7 +428,8 @@ class Motor:
     ev3def = {
               'MOTION_TORQUE': 0.2,
               'REST_TORQUE': 0.4,
-              'MAX_SPEED': 18.326,
+              'max_speed': 18.326,
+              'wheel': LegoWheel_41896c04(),
               }
 
     def __init__(self, address=None, **kwargs):
@@ -363,13 +441,14 @@ class Motor:
         self.address = address
 
         if 'max_speed' not in self.kwargs:
-            self.kwargs['max_speed'] = Motor.ev3def['MAX_SPEED']
+            self.kwargs['max_speed'] = Motor.ev3def['max_speed']
         self.max_speed = self.kwargs['max_speed']
 
         if "clientID" in self.kwargs:  # local preference
             self.clientID = self.kwargs['clientID']
         elif "clientID" in globals():  # global question
-            print("global ID")
+            if VERBOSE:
+                print("global ID")
             self.clientID = clientID
             self.kwargs['clientID'] = clientID
         else:
@@ -401,6 +480,18 @@ class Motor:
 
         return rC, ini_wheel_pos
 
+    def full_stop(self):
+        errorCode = vrep.simxSetJointTargetVelocity(
+            self.kwargs['clientID'],
+            self.kwargs.get('motor'),
+            0,
+            vrep.simx_opmode_blocking)
+        errorCode = vrep.simxSetJointForce(
+            self.kwargs['clientID'],
+            self.kwargs.get('motor'),
+            self.kwargs['REST_TORQUE'],
+            vrep.simx_opmode_blocking)
+
     def run_forever(speed_sp=0):
         print("Not implemented")
         pass
@@ -425,6 +516,11 @@ class Motor:
         if VERBOSE:
             print(f"{__class__.__name__}.run_to_rel_pos: Partly implemented.")
 
+        if kwargs.get('wait', False) == True:
+            optmode = vrep.simx_opmode_oneshot_wait
+        else:
+            optmode = vrep.simx_opmode_streaming
+
         speed_sp = self._speed_native_units(speed_sp)
 
         # wait (10-20ms) for robot to send back the data...
@@ -442,16 +538,17 @@ class Motor:
                 self.kwargs['clientID'],
                 self.kwargs.get('motor'),
                 speed_sp,
-                vrep.simx_opmode_streaming) #oneshot_wait)
-            errorCodeSJF = vrep.simxSetJointForce(self.kwargs['clientID'],
+                optmode)
+            errorCodeSJF = vrep.simxSetJointForce(
+                self.kwargs['clientID'],
                 self.kwargs.get('motor'),
                 self.kwargs['MOTION_TORQUE'],
-                vrep.simx_opmode_streaming) #oneshot_wait)
+                optmode)
             # positions of a wheel
             errorCodeP, wheel_pos = vrep.simxGetJointPosition(
                 self.kwargs['clientID'],
                 self.kwargs.get('motor'),
-                vrep.simx_opmode_oneshot)
+                optmode) #vrep.simx_opmode_streaming) #simx_opmode_oneshot)
 
             if VERBOSE:
                 print("{}. ini:{} wheel:{} pos:{} speed:{}".format(
@@ -463,16 +560,7 @@ class Motor:
                     errorCodeSJF, rC))
 
         # full stop
-        errorCode = vrep.simxSetJointTargetVelocity(
-            self.kwargs['clientID'],
-            self.kwargs.get('motor'),
-            0,
-            vrep.simx_opmode_blocking)
-        errorCode = vrep.simxSetJointForce(
-            self.kwargs['clientID'],
-            self.kwargs.get('motor'),
-            self.kwargs['REST_TORQUE'],
-            vrep.simx_opmode_blocking)
+        self.full_stop()
 
         return wheel_pos
 
@@ -552,28 +640,64 @@ class MoveTank: #(LargeMotor):
             print(f'{__class__.__name__} break not implemented')
 
         if block is not True:
-            print(f'{__class__.__name__} break not implemented')
+            print(f'{__class__.__name__} block not implemented')
 
-        print(left_speed, right_speed)
         left_speed, right_speed = self._unpack_speeds_to_native_units(
             left_speed, right_speed
         )
-        print(left_speed, right_speed)
-        assert False
 
-        factor = 1
-        for deg in range(degrees * factor):
-            errorCode = vrep.simxPauseCommunication(clientID, not True)
-            if VERBOSE:
-                print("PauseComm Przed:", errorCode)
-            self.motors['Left motor port'].run_to_rel_pos(
-                1 / factor, left_speed)
-            self.motors['Right motor port'].run_to_rel_pos(
-                1 / factor, right_speed)
-            errorCode = vrep.simxPauseCommunication(clientID, False)
-            if VERBOSE:
-                print("PauseComm Po:", errorCode)
-        return errorCode
+        rCL, ini_pos_L = self.motors['Left motor port'].initialize_motor()
+        rCR, ini_pos_R = self.motors['Right motor port'].initialize_motor()
+
+        optmode = vrep.simx_opmode_oneshot_wait
+
+        # errorCode = vrep.simxPauseCommunication(clientID, 1)
+        _motor = 'Right motor port'
+        errorCodeSJF = vrep.simxSetJointForce(
+            self.motors[_motor].kwargs['clientID'],
+            self.motors[_motor].kwargs.get('motor'),
+            self.motors[_motor].kwargs['MOTION_TORQUE'],
+            vrep.simx_opmode_streaming)
+        _motor = 'Left motor port'
+        errorCodeSJF = vrep.simxSetJointForce(
+            self.motors[_motor].kwargs['clientID'],
+            self.motors[_motor].kwargs.get('motor'),
+            self.motors[_motor].kwargs['MOTION_TORQUE'],
+            vrep.simx_opmode_streaming)
+
+        _motor = 'Right motor port'
+        errorCodeJTV = vrep.simxSetJointTargetVelocity(
+            self.motors[_motor].kwargs['clientID'],
+            self.motors[_motor].kwargs.get('motor'),
+            right_speed,
+            optmode)
+
+        _motor = 'Left motor port'
+        errorCodeJTV = vrep.simxSetJointTargetVelocity(
+            self.motors[_motor].kwargs['clientID'],
+            self.motors[_motor].kwargs.get('motor'),
+            left_speed * 0,
+            optmode)
+
+
+        # errorCode = vrep.simxPauseCommunication(clientID, 0)
+
+        self.motors['Left motor port'].full_stop()
+        self.motors['Right motor port'].full_stop()
+
+        # factor = self.motors['Left motor port'].kwargs['wheel'].circumference
+        # for deg in range(degrees):
+        #     # errorCode = vrep.simxPauseCommunication(clientID, False)
+        #     # if VERBOSE:
+        #     #     print("PauseComm Przed:", errorCode)
+        #     self.motors['Left motor port'].run_to_rel_pos(
+        #         1 / factor, left_speed, wait=True)
+        #     self.motors['Right motor port'].run_to_rel_pos(
+        #         1 / factor, right_speed, wait=True)
+        #     # errorCode = vrep.simxPauseCommunication(clientID, 0)
+        #     # if VERBOSE:
+        #     #     print("PauseComm Po:", errorCode)
+        # return 0
 
     def on_for_rotations(self, left_speed, right_speed,
                          rotations, brake=True, block=True):
