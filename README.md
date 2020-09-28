@@ -1,5 +1,7 @@
 # probot_sim
-[Probot Simulator](https://probot.smcebi.edu.pl)
+![p:ROBOT logo](https://lh6.googleusercontent.com/Ta2XtLOhMUVl5H_mgd3DOLSogOxFz1607HSA5Z00eabP2JdM7jKTe80SPg1Axua-74xqvuQmg8x4GZ5lGJj9zUI3ILWwxJxoBotpHdFn22KfwO0BSA0=w472)
+
+[p:ROBOT](https://probot.smcebi.edu.pl) Simulator
 
 How to start
 1. Get latest vrep software (not CoppeliaSim). Go for latest V-REP 3.6.2 version.
