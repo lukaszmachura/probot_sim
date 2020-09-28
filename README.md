@@ -9,8 +9,7 @@ How to start with the simulator
 1. Get latest vrep software (not CoppeliaSim). Go for latest V-REP 3.6.2 version. During download, use the "V-REP PRO EDU" file for your operating system.
 http://www.coppeliarobotics.com/previousVersions
 
-2. Get Lego EV3 device
-https://github.com/albmardom/EV-R3P/tree/master/Modelo%20V-REP
+2. Get Lego EV3 device on [github](https://github.com/albmardom/EV-R3P/tree/master/Modelo%20V-REP) or from [our copy](https://drive.google.com/drive/folders/10v8IzB-qGFPkwCi_i2PbRgh9YLKMt747)
 and copy it to [vrep dir]/models/robots/mobile/ directory
 
 3. Copy scenes/probot_square.ttt scene to
