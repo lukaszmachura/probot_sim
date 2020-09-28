@@ -12,10 +12,10 @@ if ev3.VERBOSE:
     print(f"LargeMotor: {mB}")
 
 
-tank.on_for_degrees(3, 3, 360)
+tank.on_for_degrees(3, -3, 360)
 
 
-mB.run_to_rel_pos(position_sp=360, speed_sp=3, stop_action='break')
+# mB.run_to_rel_pos(position_sp=360, speed_sp=3, stop_action='break')
 
 # for i in [1, 2, 3, 4]:
 #     print(f"step {i}")
@@ -29,7 +29,7 @@ mB.run_to_rel_pos(position_sp=360, speed_sp=3, stop_action='break')
 
 
 # mC = ev3.LargeMotor("Motor_C")
-# mB.run_to_rel_pos(280, 1)
-# mC.run_to_rel_pos(280, 1)
+# mB.run_to_rel_pos(280, 13)
+# mC.run_to_rel_pos(280, 13)
 
 # ev3.restart_simulation()
