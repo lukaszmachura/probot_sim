@@ -398,17 +398,8 @@ class MotorSet(object):
                         raise e
 
     def set_polarity(self, polarity, motors=None):
+        raise NotImplementedError
         pass
-        # valid_choices = (LargeMotor.POLARITY_NORMAL,
-        #                  LargeMotor.POLARITY_INVERSED)
-        #
-        # assert polarity in valid_choices,\
-        #     "%s is an invalid polarity choice, must be %s" % (polarity,
-        #      ', '.join(valid_choices))
-        # motors = motors if motors is not None else self.motors.values()
-        #
-        # for motor in motors:
-        #     motor.polarity = polarity
 
     def _run_command(self, **kwargs):
         motors = kwargs.get('motors', self.motors.values())
@@ -481,15 +472,15 @@ class Motor:
         return rC, ini_wheel_pos
 
     def full_stop(self):
-        errorCode = vrep.simxSetJointTargetVelocity(
-            self.kwargs['clientID'],
-            self.kwargs.get('motor'),
-            0,
-            vrep.simx_opmode_blocking)
         errorCode = vrep.simxSetJointForce(
             self.kwargs['clientID'],
             self.kwargs.get('motor'),
             self.kwargs['REST_TORQUE'],
+            vrep.simx_opmode_blocking)
+        errorCode = vrep.simxSetJointTargetVelocity(
+            self.kwargs['clientID'],
+            self.kwargs.get('motor'),
+            0,
             vrep.simx_opmode_blocking)
 
     def run_forever(speed_sp=0):
@@ -642,62 +633,50 @@ class MoveTank: #(LargeMotor):
         if block is not True:
             print(f'{__class__.__name__} block not implemented')
 
+        # deg to rad
+        if degrees == 'full':
+            degrees = 360
+        rad = degrees * math.pi / 180
+
+        _clientID = self.motors['Left motor port'].kwargs['clientID']
+        _left_motor = self.motors['Left motor port']
+        _right_motor = self.motors['Right motor port']
+
         left_speed, right_speed = self._unpack_speeds_to_native_units(
             left_speed, right_speed
         )
 
-        rCL, ini_pos_L = self.motors['Left motor port'].initialize_motor()
-        rCR, ini_pos_R = self.motors['Right motor port'].initialize_motor()
+        rCL, ini_pos_L = _left_motor.initialize_motor()
+        rCR, ini_pos_R = _right_motor.initialize_motor()
+        if VERBOSE:
+            print(ini_pos_L, ini_pos_R)
 
-        optmode = vrep.simx_opmode_oneshot_wait
+        pos_L, pos_R = ini_pos_L, ini_pos_R
+        while ((abs(pos_L - ini_pos_L) <= rad)
+            and (abs(pos_R - ini_pos_R) <= rad)):
 
-        # errorCode = vrep.simxPauseCommunication(clientID, 1)
-        _motor = 'Right motor port'
-        errorCodeSJF = vrep.simxSetJointForce(
-            self.motors[_motor].kwargs['clientID'],
-            self.motors[_motor].kwargs.get('motor'),
-            self.motors[_motor].kwargs['MOTION_TORQUE'],
-            vrep.simx_opmode_streaming)
-        _motor = 'Left motor port'
-        errorCodeSJF = vrep.simxSetJointForce(
-            self.motors[_motor].kwargs['clientID'],
-            self.motors[_motor].kwargs.get('motor'),
-            self.motors[_motor].kwargs['MOTION_TORQUE'],
-            vrep.simx_opmode_streaming)
+            err_vL = vrep.simxSetJointTargetVelocity(
+                _clientID, _left_motor.kwargs.get('motor'), left_speed,
+                vrep.simx_opmode_oneshot_wait
+            )
+            err_vR = vrep.simxSetJointTargetVelocity(
+                _clientID, _right_motor.kwargs.get('motor'), right_speed,
+                vrep.simx_opmode_oneshot_wait
+            )
 
-        _motor = 'Right motor port'
-        errorCodeJTV = vrep.simxSetJointTargetVelocity(
-            self.motors[_motor].kwargs['clientID'],
-            self.motors[_motor].kwargs.get('motor'),
-            right_speed,
-            optmode)
-
-        _motor = 'Left motor port'
-        errorCodeJTV = vrep.simxSetJointTargetVelocity(
-            self.motors[_motor].kwargs['clientID'],
-            self.motors[_motor].kwargs.get('motor'),
-            left_speed * 0,
-            optmode)
-
-
-        # errorCode = vrep.simxPauseCommunication(clientID, 0)
+            rC, pos_L = vrep.simxGetJointPosition(
+                _clientID,
+                _left_motor.kwargs.get('motor'),
+                vrep.simx_opmode_streaming)
+            rC, pos_R = vrep.simxGetJointPosition(
+                _clientID,
+                _right_motor.kwargs.get('motor'),
+                vrep.simx_opmode_streaming)
+            if VERBOSE:
+                print(pos_L - ini_pos_L, pos_R - ini_pos_R)
 
         self.motors['Left motor port'].full_stop()
         self.motors['Right motor port'].full_stop()
-
-        # factor = self.motors['Left motor port'].kwargs['wheel'].circumference
-        # for deg in range(degrees):
-        #     # errorCode = vrep.simxPauseCommunication(clientID, False)
-        #     # if VERBOSE:
-        #     #     print("PauseComm Przed:", errorCode)
-        #     self.motors['Left motor port'].run_to_rel_pos(
-        #         1 / factor, left_speed, wait=True)
-        #     self.motors['Right motor port'].run_to_rel_pos(
-        #         1 / factor, right_speed, wait=True)
-        #     # errorCode = vrep.simxPauseCommunication(clientID, 0)
-        #     # if VERBOSE:
-        #     #     print("PauseComm Po:", errorCode)
-        # return 0
 
     def on_for_rotations(self, left_speed, right_speed,
                          rotations, brake=True, block=True):

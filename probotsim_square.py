@@ -4,22 +4,18 @@ ev3.VERBOSE = not True
 # ev3.restart_simulation()
 
 tank = ev3.MoveTank("Motor_B", "Motor_C")
-# print(f"Gyro Sensor ID: {tank}")
+if ev3.VERBOSE:
+    print(f"Tank: {tank}")
 
-# mB = ev3.LargeMotor("Motor_B")
-# if ev3.VERBOSE:
-#     print(f"LargeMotor: {mB}")
+mB = ev3.LargeMotor("Motor_B")
+if ev3.VERBOSE:
+    print(f"LargeMotor: {mB}")
 
-# g = ev3.GyroSensor()#gyroName="GyroSensor_reference_G")
-# if ev3.VERBOSE:
-#     print(f"Gyro Sensor ID: {g}")
 
-tank.on_for_degrees(43, 43, 10)
+tank.on_for_degrees(3, 3, 360)
 
-# w = ev3.Wheel(1, 2) #, description="Large wheel")
-# print(w)
 
-# mB.run_to_rel_pos(position_sp=360, speed_sp=100, stop_action='break')
+mB.run_to_rel_pos(position_sp=360, speed_sp=3, stop_action='break')
 
 # for i in [1, 2, 3, 4]:
 #     print(f"step {i}")
