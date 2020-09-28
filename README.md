@@ -1,10 +1,12 @@
-# probot_sim
+# Lego ev3 simulator
+
 ![p:ROBOT logo](probot_logo.png)
 
-[p:ROBOT](https://probot.smcebi.edu.pl) Simulator
+This is a part of the [p]:ROBOT edu project run by the University of Silesia and Foundation for the development of the Silesian Centre for Education and Interdisciplinary Research in Chorzów EDU-RES. For detailed informations please visit us at [the official project website](https://probot.smcebi.edu.pl).
 
-How to start
-1. Get latest vrep software (not CoppeliaSim). Go for latest V-REP 3.6.2 version.
+
+How to start with the simulator
+1. Get latest vrep software (not CoppeliaSim). Go for latest V-REP 3.6.2 version. During download, use the "V-REP PRO EDU" file for your operating system.
 http://www.coppeliarobotics.com/previousVersions
 
 2. Get Lego EV3 device
