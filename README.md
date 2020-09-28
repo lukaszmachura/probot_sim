@@ -6,11 +6,9 @@ This is a part of the [p]:ROBOT edu project run by the University of Silesia and
 
 
 How to start with the simulator
-1. Get latest vrep software (not CoppeliaSim). Go for latest V-REP 3.6.2 version. During download, use the "V-REP PRO EDU" file for your operating system.
-http://www.coppeliarobotics.com/previousVersions
+1. Get latest vrep software (not CoppeliaSim). Go for latest V-REP 3.6.2 version. During download, use the "V-REP PRO EDU" file for your operating system. This [link](http://www.coppeliarobotics.com/previousVersions) will get you to the desired download page.
 
-2. Get Lego EV3 device on [github](https://github.com/albmardom/EV-R3P/tree/master/Modelo%20V-REP) or from [our copy](https://drive.google.com/drive/folders/10v8IzB-qGFPkwCi_i2PbRgh9YLKMt747)
-and copy it to [vrep dir]/models/robots/mobile/ directory
+2. Get Lego EV3 device on [github](https://github.com/albmardom/EV-R3P/tree/master/Modelo%20V-REP) and copy it to [vrep dir]/models/robots/mobile/ directory. Alternatively you can use or from [this link](https://drive.google.com/drive/folders/10v8IzB-qGFPkwCi_i2PbRgh9YLKMt747) to get the robot model.
 
 3. Copy scenes/probot_square.ttt scene to
 [vrep dir]/scenes
@@ -27,6 +25,6 @@ Note that you need specific remote API library: "remoteApi.dll" (Windows), "remo
 
 6. Run vrep.
 
-7. Open "probot_square.ttt" scene.
+7. Open "probot_square.ttt" scene (File->Open scene).
 
-8. Run your code.
+8. Run your Python code. You can start from one of the provided examples.
