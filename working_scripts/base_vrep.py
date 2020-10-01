@@ -38,15 +38,7 @@ if VERBOSE:
         print('Not connected')
         sys.exit('Could not connect')
 
-def get_ini_pos(h):
-    rC = 1
-    while rC != vrep.simx_error_noerror:
-        rC, pos = vrep.simxGetJointPosition(
-                            clientID,
-                            handles[h],
-                            vrep.simx_opmode_oneshot)
-    return rC, pos
-
+# vrep.simxSynchronous(clientID, 1)
 vrep.simxStartSimulation(clientID, vrep.simx_opmode_oneshot)
 
 handles = {}
@@ -69,12 +61,3 @@ for name in [
     handles[name] = var
     if VERBOSE and False:
         print(name, api_return_codes.get(eC, eC), var)
-
-gyro = handles['Giroscopio']
-print('Gyro is', gyro)
-
-
-
-
-# stop
-# vrep.simxStopSimulation(clientID, vrep.simx_opmode_oneshot)

@@ -14,9 +14,20 @@ import sys
 import math
 import time
 import re
+from time import sleep
 
 from collections import OrderedDict
 
+api_return_codes = {
+    0: 'OK',  # 'simx_return_ok; The function executed fine',
+    1: 'simx_return_novalue_flag; There is no command reply in the input buffer. This should not always be considered as an error, depending on the selected operation mode',
+    2: 'simx_return_timeout_flag; The function timed out (probably the network is down or too slow)',
+    4: 'simx_return_illegal_opmode_flag; The specified operation mode is not supported for the given function',
+    8: 'simx_return_remote_error_flag; The function caused an error on the server side (e.g. an invalid handle was specified)',
+    16: 'simx_return_split_progress_flag; The communication thread is still processing previous split command of the same type',
+    32: 'simx_return_local_error_flag; The function caused an error on the client side',
+    64: 'simx_return_initialize_error_flag; simxStart was not yet called'
+}
 
 CONNECT = not True
 VERBOSE = not True
@@ -636,6 +647,10 @@ class MoveTank: #(LargeMotor):
         # deg to rad
         if degrees == 'full':
             degrees = 360
+        if degrees == 'half':
+            degrees = 180
+        if degrees == 'right':
+            degrees = 90
         rad = degrees * math.pi / 180
 
         _clientID = self.motors['Left motor port'].kwargs['clientID']
@@ -751,6 +766,9 @@ class GyroSensor(Sensor):
 
     # vrep
     def __init__(self, **kwargs):
+        print("This class is here for the future verisons of the simulator.")
+        print("At this moment GyroSensoe is not working in vrep.")
+
         self.kwargs = kwargs
 
         if "clientID" in self.kwargs:  # local preference
@@ -819,6 +837,7 @@ class GyroSensor(Sensor):
 # TODO: 1. move (maybe) to a function and call here...
 #       2. think of possible user specific clientID (in kwargs?)
 #       3. rewrite self.kwargs['arg'] to self.kwargs.get('arg')
-if CONNECT:
+#       4. add __slots__ to Motor
+if __name__ == "__main__" and CONNECT:
     vrep.simxFinish(-1)
     clientID = connection()
