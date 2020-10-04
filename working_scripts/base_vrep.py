@@ -91,6 +91,11 @@ def get_rotation(motor):
 
 
 def reset_rotation_count(motor):
+    """
+    motor: motor number
+        1: 'B' or 'left'
+        2: 'C' or 'right'
+    """
     emptyBuff = bytearray()
     out = vrep.simxCallScriptFunction(
         clientID,
@@ -105,7 +110,13 @@ def reset_rotation_count(motor):
 
 
 def run(motor, speed):
-    "..."
+    """
+    motor (int): motor number
+        1: 'B' or 'left'
+        2: 'C' or 'right'
+        3: both
+    speed (int/float): speed of motor, in [-MAX_SPEED, MAX_SPEED]
+    """
     emptyBuff = bytearray()
     out = vrep.simxCallScriptFunction(
         clientID,

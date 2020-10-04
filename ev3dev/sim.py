@@ -120,6 +120,7 @@ class SpeedPercent(SpeedValue):
     """
     Speed as a percentage of the motor's maximum rated speed.
     """
+    # max_speed = 18.326
 
     def __init__(self, percent):
         assert -100 <= percent <= 100,\
@@ -431,11 +432,27 @@ class Motor:
               'MOTION_TORQUE': 0.2,
               'REST_TORQUE': 0.4,
               'max_speed': 18.326,
+              'MAX_SPEED': 18.326,
               'wheel': LegoWheel_41896c04(),
               }
 
     def __init__(self, address=None, **kwargs):
         self.kwargs = kwargs
+
+        if 'B' in address:
+            self.int_motor = 1
+            self.str_motor = 'B'
+            self.kwargs['int motor'] = 1
+            self.kwargs['str motor'] = 'B'
+            address = "Motor_B"
+        elif 'C' in address:
+            self.int_motor = 2
+            self.str_motor = 'C'
+            self.kwargs['int motor'] = 2
+            self.kwargs['str motor'] = 'C'
+            address = "Motor_C"
+        else:
+            raise ValueError('Not a TANK MODE, address single motor')
 
         if address is not None:
             self.kwargs['address'] = address
@@ -455,8 +472,6 @@ class Motor:
             self.kwargs['clientID'] = clientID
         else:
             self.kwargs['clientID'] = connection(dummy=not True)
-            # print("Need clientID")
-            # sys.exit("No client")
 
         # vrep
         eC, motor = vrep.simxGetObjectHandle(self.kwargs['clientID'],
@@ -494,29 +509,49 @@ class Motor:
             0,
             vrep.simx_opmode_blocking)
 
-    def run_forever(speed_sp=0):
-        print("Not implemented")
-        pass
+    def stop(self, **kwargs):
+        "..."
+        emptyBuff = bytearray()
+        out = vrep.simxCallScriptFunction(
+            clientID,
+            'Funciones',
+            vrep.sim_scripttype_childscript,
+            'Off',
+            [self.int_motor], [], [], emptyBuff,
+            vrep.simx_opmode_oneshot_wait
+        )
+        returnCode, outInts, outFloats, outStrings, outBuffer = out
+        return returnCode
 
-        step = 1
-        while self.kwargs.get('state') == 'run':
-            errorCodeJTV = vrep.simxSetJointTargetVelocity(
-                    self.kwargs['clientID'],
-                    self.kwargs.get('motor'),
-                    speed_sp, vrep.simx_opmode_streaming) #oneshot_wait)
-            errorCodeSJF = vrep.simxSetJointForce(
-                    self.kwargs['clientID'],
-                    self.kwargs.get('motor'), self.kwargs['MOTION_TORQUE'],
-                    vrep.simx_opmode_streaming)
-            errorCodeP, wheel_pos = vrep.simxGetJointPosition(
-                    self.kwargs['clientID'],
-                    self.kwargs.get('motor'),
-                    vrep.simx_opmode_oneshot)
-        return 0
+    def run(self, speed_sp):
+        """
+        speed (int/float): speed of motor, in [-MAX_SPEED, MAX_SPEED]
+        """
+        speed_sp = int(self._speed_native_units(speed_sp))
+        if VERBOSE:
+            print(f"speed: {speed_sp}")
+
+        emptyBuff = bytearray()
+        out = vrep.simxCallScriptFunction(
+            clientID,
+            'Funciones',
+            vrep.sim_scripttype_childscript,
+            'On',
+            [self.int_motor, speed_sp], [], [], emptyBuff,
+            vrep.simx_opmode_oneshot_wait
+        )
+        returnCode, outInts, outFloats, outStrings, outBuffer = out
+        return returnCode
+
+    def run_forever(self, speed_sp):
+        return self.run(speed_sp)
+
+    def runforever(self, speed_sp):
+        return self.run(speed_sp)
 
     def run_to_rel_pos(self, position_sp, speed_sp, **kwargs):
-        if VERBOSE:
-            print(f"{__class__.__name__}.run_to_rel_pos: Partly implemented.")
+        # if VERBOSE:
+        #     print(f"{__class__.__name__}.run_to_rel_pos: Partly implemented.")
 
         if kwargs.get('wait', False) == True:
             optmode = vrep.simx_opmode_oneshot_wait
@@ -587,6 +622,19 @@ class Motor:
     def __repr__(self):
         return self.__str__()
 
+    def reset_rotation_count(self):
+        emptyBuff = bytearray()
+        out = vrep.simxCallScriptFunction(
+            clientID,
+            'Funciones',
+            vrep.sim_scripttype_childscript,
+            'ResetRotationCount',
+            [self.int_motor], [], [], emptyBuff,
+            vrep.simx_opmode_oneshot_wait
+        )
+        returnCode, outInts, outFloats, outStrings, outBuffer = out
+        return returnCode
+
 
 class LargeMotor(Motor):
     """Large Motor class"""
@@ -594,8 +642,7 @@ class LargeMotor(Motor):
         super(LargeMotor, self).__init__(address, **kwargs)
 
     def reset(self):
-        'dummy function for now'
-        pass
+        return self.reset_rotation_count()
 
 
 class MoveTank: #(LargeMotor):
@@ -766,9 +813,6 @@ class GyroSensor(Sensor):
 
     # vrep
     def __init__(self, **kwargs):
-        print("This class is here for the future verisons of the simulator.")
-        print("At this moment GyroSensoe is not working in vrep.")
-
         self.kwargs = kwargs
 
         if "clientID" in self.kwargs:  # local preference
@@ -798,37 +842,54 @@ class GyroSensor(Sensor):
         if VERBOSE:
             print("GyroError, GyroCodeNr", errorCode, self.gyro)
 
+        self.connected = True
+        self.units = 'degrees'
+
     def __str__(self):
         return str(self.gyro)
 
     def __repr__(self):
         return self.__str__()
 
+    def angle(self):
+        emptyBuff = bytearray()
+        out = vrep.simxCallScriptFunction(
+            clientID,
+            'Funciones',
+            vrep.sim_scripttype_childscript,
+            'SensorGyroA',
+            [], [], [], emptyBuff,
+            vrep.simx_opmode_oneshot_wait
+        )
+
+        returnCode, outInts, outFloats, outStrings, outBuffer = out
+        _angle = outInts[0]
+        return _angle
+
+    def angular_velocity(self):
+        emptyBuff = bytearray()
+        out = vrep.simxCallScriptFunction(
+            clientID,
+            'Funciones',
+            vrep.sim_scripttype_childscript,
+            'SensorGyroVA',
+            [], [], [], emptyBuff,
+            vrep.simx_opmode_oneshot_wait
+        )
+
+        returnCode, outInts, outFloats, outStrings, outBuffer = out
+        _angular_velocity = outInts[0]
+        return _angular_velocity
+
     def value(self):
-        rC = 1
-        # while rC != vrep.simx_error_noerror:
-        if 1:
-            rC, signalValue = vrep.simxGetFloatSignal(
-                self.kwargs.get('clientID'),
-                self.VREP_GYRO_NAME,
-                vrep.simx_opmode_buffer
-            )
+        return self.angle()
 
-            # this works only in Ceppelia
-            # matrix = vrep.simxGetObjectMatrix(
-            #     self.gyro,
-            #     -1,
-            #     vrep.simxServiceCall
-            # )
+    def velocity(self):
+        return self.angular_velocity()
 
-        # return vrep.simxgetObjectMatrix(self.gyro, -1)
-        return rC, signalValue,\
-            self.VREP_GYRO_NAME, self.kwargs.get('gyroName')  #, matrix
+    def state(self):
+        return self.angle(), self.angular_velocity()
 
-    # oldTransformationMatrix=sim.getObjectMatrix(ref,-1)
-
-
-# Gyro
 
 
 # vrep simulation init
