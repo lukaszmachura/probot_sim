@@ -1,6 +1,7 @@
 import vrep
 import sys
 import math
+import time
 
 api_return_codes = {
     0: 'OK',  # 'simx_return_ok; The function executed fine',
@@ -61,3 +62,184 @@ for name in [
     handles[name] = var
     if VERBOSE and False:
         print(name, api_return_codes.get(eC, eC), var)
+
+
+###
+# below functions should help bulid around sensors
+
+
+def get_rotation(motor):
+    "..."
+    if motor == 'B':
+        fun = 'MotorRotationCountB'
+    elif motor == 'C':
+        fun = 'MotorRotationCountC'
+    else:
+        raise ValueError('motor = C or B')
+
+    emptyBuff = bytearray()
+    out = vrep.simxCallScriptFunction(
+        clientID,
+        'Funciones',
+        vrep.sim_scripttype_childscript,
+        fun,
+        [], [], [], emptyBuff,
+        vrep.simx_opmode_oneshot_wait
+    )
+    returnCode, outInts, outFloats, outStrings, outBuffer = out
+    return outInts[0]
+
+
+def reset_rotation_count(motor):
+    emptyBuff = bytearray()
+    out = vrep.simxCallScriptFunction(
+        clientID,
+        'Funciones',
+        vrep.sim_scripttype_childscript,
+        'ResetRotationCount',
+        [motor], [], [], emptyBuff,
+        vrep.simx_opmode_oneshot_wait
+    )
+    returnCode, outInts, outFloats, outStrings, outBuffer = out
+    return returnCode
+
+
+def run(motor, speed):
+    "..."
+    emptyBuff = bytearray()
+    out = vrep.simxCallScriptFunction(
+        clientID,
+        'Funciones',
+        vrep.sim_scripttype_childscript,
+        'On',
+        [motor, speed], [], [], emptyBuff,
+        vrep.simx_opmode_oneshot_wait
+    )
+    returnCode, outInts, outFloats, outStrings, outBuffer = out
+    return returnCode
+
+
+def stop(motor):
+    "..."
+    emptyBuff = bytearray()
+    out = vrep.simxCallScriptFunction(
+        clientID,
+        'Funciones',
+        vrep.sim_scripttype_childscript,
+        'Off',
+        [motor], [], [], emptyBuff,
+        vrep.simx_opmode_oneshot_wait
+    )
+    returnCode, outInts, outFloats, outStrings, outBuffer = out
+    return returnCode
+
+
+def read_sonar_sensor():
+    emptyBuff = bytearray()
+    out = vrep.simxCallScriptFunction(
+        clientID,
+        'Funciones',
+        # dev,
+        vrep.sim_scripttype_childscript,
+        # handle,
+        'SensorSonar',
+        [], [], [], emptyBuff,
+        vrep.simx_opmode_oneshot_wait #buffer #locking
+    )
+    returnCode, outInts, outFloats, outStrings, outBuffer = out
+    return outFloats[0]
+
+
+def display_text(message):
+    emptyBuff = bytearray()
+    out = vrep.simxCallScriptFunction(
+        clientID,
+        'remoteApiCommandServer',
+        vrep.sim_scripttype_childscript,
+        'displayText_function',
+        [], [], [message], emptyBuff,
+        vrep.simx_opmode_oneshot_wait
+    )
+    returnCode, outInts, outFloats, outStrings, outBuffer = out
+    if outStrings[0] == 'message was displayed':
+        return vrep.simx_return_ok
+    else:
+        return vrep.simx_return_remote_error_flag
+
+
+def reset_gyro():
+    emptyBuff = bytearray()
+    out = vrep.simxCallScriptFunction(
+        clientID,
+        'Funciones',
+        vrep.sim_scripttype_childscript,
+        'ResetGyroA',
+        [], [], [], emptyBuff,
+        vrep.simx_opmode_oneshot_wait
+    )
+    returnCode, outInts, outFloats, outStrings, outBuffer = out
+    return returnCode
+
+
+def gyro_sensor():
+    emptyBuff = bytearray()
+    out = vrep.simxCallScriptFunction(
+        clientID,
+        'Funciones',
+        vrep.sim_scripttype_childscript,
+        'SensorGyroA',
+        [], [], [], emptyBuff,
+        vrep.simx_opmode_oneshot_wait
+    )
+
+    returnCode, outInts, outFloats, outStrings, outBuffer = out
+    angle = outInts[0]
+
+    emptyBuff = bytearray()
+    out = vrep.simxCallScriptFunction(
+        clientID,
+        'Funciones',
+        vrep.sim_scripttype_childscript,
+        'SensorGyroVA',
+        [], [], [], emptyBuff,
+        vrep.simx_opmode_oneshot_wait
+    )
+
+    returnCode, outInts, outFloats, outStrings, outBuffer = out
+    angular_velocity = outInts[0]
+
+    return angle, angular_velocity
+
+
+def get_light():
+    'returns intensity'
+    emptyBuff = bytearray()
+    out = vrep.simxCallScriptFunction(
+        clientID,
+        'Funciones',
+        vrep.sim_scripttype_childscript,
+        'SensorLight',
+        [], [], [], emptyBuff,
+        vrep.simx_opmode_oneshot_wait
+    )
+    returnCode, outInts, outFloats, outStrings, outBuffer = out
+    return outInts[0]
+
+
+def get_color():
+    'returns red, green, blue, depth values'
+    emptyBuff = bytearray()
+    out = vrep.simxCallScriptFunction(
+        clientID,
+        'Funciones',
+        vrep.sim_scripttype_childscript,
+        'SensorColor',
+        [], [], [], emptyBuff,
+        vrep.simx_opmode_oneshot_wait
+    )
+    returnCode, outInts, outFloats, outStrings, outBuffer = out
+    return outFloats
+
+
+def get_color_light():
+    return get_color() + [get_light()]

@@ -1,17 +1,14 @@
 from base_vrep import *
 
 
-sensor = "Sensor_Color_LR"
-handle = handles[sensor]
-print(sensor, handle)
+display_text("Stop at the black line")
 
-data = vrep.simxGetVisionSensorImage(
-    clientID,
-    handle, 0,
-    vrep.simx_opmode_buffer)
+run(3, 2)
 
-print(api_return_codes[data[0]])
+out = get_color_light()
+r, g, b, depth, intensity = out
+while intensity > 20:
+    out = get_color_light()
+    r, g, b, depth, intensity = out
 
-if data[0] == vrep.simx_return_ok:
-    imageAcquisitionTime = vrep.simxGetLastCmdTime(clientID)
-    print(imageAcquisitionTime)
+stop(3)
