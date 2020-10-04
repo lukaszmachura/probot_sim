@@ -123,7 +123,7 @@ def run(motor, speed):
         'Funciones',
         vrep.sim_scripttype_childscript,
         'On',
-        [motor, speed], [], [], emptyBuff,
+        [motor, int(speed)], [speed], [], emptyBuff,
         vrep.simx_opmode_oneshot_wait
     )
     returnCode, outInts, outFloats, outStrings, outBuffer = out

@@ -29,6 +29,11 @@ api_return_codes = {
     64: 'simx_return_initialize_error_flag; simxStart was not yet called'
 }
 
+OUTPUT_A = 'Motor_A'
+OUTPUT_B = 'Motor_B'
+OUTPUT_C = 'Motor_C'
+OUTPUT_D = 'Motor_D'
+
 CONNECT = not True
 VERBOSE = not True
 if VERBOSE:
@@ -123,11 +128,21 @@ class SpeedPercent(SpeedValue):
     # max_speed = 18.326
 
     def __init__(self, percent):
-        assert -100 <= percent <= 100,\
-            f"{percent} is an invalid percentage, must be between \
+        f"{percent} must be between \
              -100 and 100 (inclusive)"
-
         self.percent = percent
+
+    @property
+    def percent(self):
+        return self.__percent
+
+    @percent.setter
+    def percent(self, val):
+        if val > 100:
+            self.__percent = 100
+        if val < -100:
+            self.__percent = -100
+        self.__percent = val
 
     def __str__(self):
         return str(self.percent) + "%"
@@ -527,7 +542,7 @@ class Motor:
         """
         speed (int/float): speed of motor, in [-MAX_SPEED, MAX_SPEED]
         """
-        speed_sp = int(self._speed_native_units(speed_sp))
+        speed_sp = self._speed_native_units(speed_sp)
         if VERBOSE:
             print(f"speed: {speed_sp}")
 
@@ -537,7 +552,7 @@ class Motor:
             'Funciones',
             vrep.sim_scripttype_childscript,
             'On',
-            [self.int_motor, speed_sp], [], [], emptyBuff,
+            [self.int_motor], [speed_sp], [], emptyBuff,
             vrep.simx_opmode_oneshot_wait
         )
         returnCode, outInts, outFloats, outStrings, outBuffer = out
@@ -549,67 +564,89 @@ class Motor:
     def runforever(self, speed_sp):
         return self.run(speed_sp)
 
+    def get_rotation(self):
+        "..."
+
+        motor = self.str_motor
+        if 'B' in motor:
+            fun = 'MotorRotationCountB'
+        elif 'C' in motor:
+            fun = 'MotorRotationCountC'
+        else:
+            raise ValueError('motor = C or B')
+
+        emptyBuff = bytearray()
+        out = vrep.simxCallScriptFunction(
+            clientID,
+            'Funciones',
+            vrep.sim_scripttype_childscript,
+            fun,
+            [], [], [], emptyBuff,
+            vrep.simx_opmode_oneshot_wait
+        )
+        returnCode, outInts, outFloats, outStrings, outBuffer = out
+        return outInts[0] * 360
+
     def run_to_rel_pos(self, position_sp, speed_sp, **kwargs):
         # if VERBOSE:
         #     print(f"{__class__.__name__}.run_to_rel_pos: Partly implemented.")
 
-        if kwargs.get('wait', False) == True:
-            optmode = vrep.simx_opmode_oneshot_wait
-        else:
-            optmode = vrep.simx_opmode_streaming
+        # if kwargs.get('wait', False) == True:
+        #     optmode = vrep.simx_opmode_oneshot_wait
+        # else:
+        #     optmode = vrep.simx_opmode_streaming
 
         speed_sp = self._speed_native_units(speed_sp)
+        self.reset_rotation_count()
 
+        while self.get_rotation() < position_sp:
+            rC = self.run(speed_sp)
+
+        self.stop()
         # wait (10-20ms) for robot to send back the data...
-        rC, ini_wheel_pos = self.initialize_motor()
+        # rC, ini_wheel_pos = self.initialize_motor()
 
         # an actuall motion
-        iteration = 0
-        wheel_pos = ini_wheel_pos
-        position_sp_rad = math.radians(position_sp)
-        while wheel_pos - ini_wheel_pos <= position_sp_rad:
-            # and iteration < 10:
-            iteration += 1
+        # iteration = 0
+        # wheel_pos = ini_wheel_pos
+        # position_sp_rad = math.radians(position_sp)
+        # while wheel_pos - ini_wheel_pos <= position_sp_rad:
+        #     # and iteration < 10:
+        #     iteration += 1
+        #
+        #     errorCodeJTV = vrep.simxSetJointTargetVelocity(
+        #         self.kwargs['clientID'],
+        #         self.kwargs.get('motor'),
+        #         speed_sp,
+        #         optmode)
+        #     errorCodeSJF = vrep.simxSetJointForce(
+        #         self.kwargs['clientID'],
+        #         self.kwargs.get('motor'),
+        #         self.kwargs['MOTION_TORQUE'],
+        #         optmode)
+        #     # positions of a wheel
+        #     errorCodeP, wheel_pos = vrep.simxGetJointPosition(
+        #         self.kwargs['clientID'],
+        #         self.kwargs.get('motor'),
+        #         optmode) #vrep.simx_opmode_streaming) #simx_opmode_oneshot)
 
-            errorCodeJTV = vrep.simxSetJointTargetVelocity(
-                self.kwargs['clientID'],
-                self.kwargs.get('motor'),
-                speed_sp,
-                optmode)
-            errorCodeSJF = vrep.simxSetJointForce(
-                self.kwargs['clientID'],
-                self.kwargs.get('motor'),
-                self.kwargs['MOTION_TORQUE'],
-                optmode)
-            # positions of a wheel
-            errorCodeP, wheel_pos = vrep.simxGetJointPosition(
-                self.kwargs['clientID'],
-                self.kwargs.get('motor'),
-                optmode) #vrep.simx_opmode_streaming) #simx_opmode_oneshot)
-
-            if VERBOSE:
-                print("{}. ini:{} wheel:{} pos:{} speed:{}".format(
-                    iteration, ini_wheel_pos,
-                    wheel_pos, position_sp_rad,
-                    speed_sp))
-                print("ERRORS: vel:{} pos:{} force:{} init:{}".format(
-                    errorCodeJTV, errorCodeP,
-                    errorCodeSJF, rC))
+            # if VERBOSE:
+            #     print("{}. ini:{} wheel:{} pos:{} speed:{}".format(
+            #         iteration, ini_wheel_pos,
+            #         wheel_pos, position_sp_rad,
+            #         speed_sp))
+            #     print("ERRORS: vel:{} pos:{} force:{} init:{}".format(
+            #         errorCodeJTV, errorCodeP,
+            #         errorCodeSJF, rC))
 
         # full stop
-        self.full_stop()
+        # self.full_stop()
 
-        return wheel_pos
+        return rC
 
     def _speed_native_units(self, speed, label=None):
         # If speed is not a SpeedValue object we treat it as a percentage
-        if not isinstance(speed, SpeedValue):
-            assert -100 <= speed <= 100,\
-                "{}{} is an invalid speed percentage, must \
-                be between -100 and 100 (inclusive)".format(
-                "" if label is None else (label + ": ") , speed)
-            speed = SpeedPercent(speed)
-
+        speed = SpeedPercent(speed)
         return speed.to_native_units(self)
 
     def __str__(self):
@@ -753,6 +790,63 @@ class MoveTank: #(LargeMotor):
         MoveTank.on_for_degrees(self, left_speed, right_speed,
             rotations * 360, brake, block)
 
+    def on(self, left_speed, right_speed,
+            brake=True, block=True):
+        """
+        motor (int): motor number
+            1: 'B' or 'left'
+            2: 'C' or 'right'
+            3: both
+        speed (int/float): speed of motor, in [-MAX_SPEED, MAX_SPEED]
+        """
+        left_speed, right_speed = self._unpack_speeds_to_native_units(
+            left_speed, right_speed
+        )
+
+        emptyBuff = bytearray()
+        if left_speed == right_speed:
+            out = vrep.simxCallScriptFunction(
+                clientID,
+                'Funciones',
+                vrep.sim_scripttype_childscript,
+                'On',
+                [3, int(left_speed)], [left_speed], [], emptyBuff,
+                vrep.simx_opmode_oneshot_wait
+            )
+        else:
+            outL = vrep.simxCallScriptFunction(
+                clientID,
+                'Funciones',
+                vrep.sim_scripttype_childscript,
+                'On',
+                [1, int(left_speed)], [left_speed], [], emptyBuff,
+                vrep.simx_opmode_oneshot_wait
+            )
+            out = vrep.simxCallScriptFunction(
+                clientID,
+                'Funciones',
+                vrep.sim_scripttype_childscript,
+                'On',
+                [2, int(right_speed)], [right_speed], [], emptyBuff,
+                vrep.simx_opmode_oneshot_wait
+            )
+        returnCode, outInts, outFloats, outStrings, outBuffer = out
+        return returnCode
+
+    def off(motor):
+        "..."
+        emptyBuff = bytearray()
+        out = vrep.simxCallScriptFunction(
+            clientID,
+            'Funciones',
+            vrep.sim_scripttype_childscript,
+            'Off',
+            [3], [], [], emptyBuff,
+            vrep.simx_opmode_oneshot_wait
+        )
+        returnCode, outInts, outFloats, outStrings, outBuffer = out
+        return returnCode
+
 
 # -----------------------------------------------------------------------------
 # Define the base class from which all other ev3dev classes are defined.
@@ -844,9 +938,21 @@ class GyroSensor(Sensor):
 
         self.connected = True
         self.units = 'degrees'
+        self.mode = 'GYRO-ANG'  # or 'GYRO-RATE'
+
+    @property
+    def mode(self):
+        return self.__mode
+
+    @mode.setter
+    def mode(self, var):
+        if var in ['GYRO_ANG', 'GYRO_RATE']:
+            self.__mode = var
+        else:
+            self.__mode = 'GYRO_ANG'
 
     def __str__(self):
-        return str(self.gyro)
+        return f"{self.gyro} in {self.mode} mode"
 
     def __repr__(self):
         return self.__str__()
@@ -882,7 +988,10 @@ class GyroSensor(Sensor):
         return _angular_velocity
 
     def value(self):
-        return self.angle()
+        if self.mode == 'GYRO-RATE':
+            return self.angular_velocity()
+        else:  # 'GYRO-ANG':
+            return self.angle()
 
     def velocity(self):
         return self.angular_velocity()
