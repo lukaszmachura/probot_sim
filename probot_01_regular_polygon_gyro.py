@@ -15,15 +15,15 @@ gy.mode = 'GYRO-ANG'
 
 # read the value from gyro sensor
 start_angle = gy.value()
-angle = 0
+angle = start_angle
 print(angle, start_angle)
-tank_pair.on_for_rotations(20, 20, 1)
+tank_pair.on_for_rotations(20, 20, 5)
 
 # do the loop while condition is true
-while abs(angle - start_angle) < 90:
-	angle = gy.value()
-	# you can see the results on the screen
-	print(angle, abs(angle - start_angle))
-	tank_pair.on(5, -5)
+while abs(angle - start_angle) < 90 :
+    angle = gy.value()
+    # you can see the results on the screen
+    print(angle, abs(angle - start_angle))
+    tank_pair.on(-10, 10)
 
 tank_pair.off()
