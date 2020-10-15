@@ -1,7 +1,6 @@
 # Create a program to make the robot move straight and then turn 90 degrees.
 # Import of necessary libraries
-# from ev3dev2.motor import MoveTank, OUTPUT_B, OUTPUT_C
-from ev3dev.sim import MoveTank, OUTPUT_B, OUTPUT_C
+from ev3dev2.motor import MoveTank, OUTPUT_B, OUTPUT_C 
 from ev3dev2.sensor.lego import GyroSensor
 from time import sleep
 

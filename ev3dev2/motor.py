@@ -1,72 +1,104 @@
-# -----------------------------------------------------------------------------
-# Copyright (c) 2020 Lukasz Machura <lukasz.machura@us.edu.pl>
+# copyright LM
 #
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
+# file version: 0.1
+# not yet specified whether we use self or kwargs (it is somehow both now)
 #
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
-# -----------------------------------------------------------------------------
 
+"""
+.. _Google Python Style Guide:
+   http://google.github.io/styleguide/pyguide.html
+"""
+
+import vrep
 import sys
 import math
-import select
 import time
-import _thread
+import re
+from time import sleep
 
-# python3 uses collections
-# micropython uses ucollections
-try:
-    from collections import OrderedDict
-except ImportError:
-    from ucollections import OrderedDict
+from collections import OrderedDict
 
-from logging import getLogger
-from os.path import abspath
-from ev3dev2 import get_current_platform, Device, list_device_names, DeviceNotDefined, ThreadNotRunning
-from ev3dev2.stopwatch import StopWatch
+api_return_codes = {
+    0: 'OK',  # 'simx_return_ok; The function executed fine',
+    1: 'simx_return_novalue_flag; There is no command reply in the input buffer. This should not always be considered as an error, depending on the selected operation mode',
+    2: 'simx_return_timeout_flag; The function timed out (probably the network is down or too slow)',
+    4: 'simx_return_illegal_opmode_flag; The specified operation mode is not supported for the given function',
+    8: 'simx_return_remote_error_flag; The function caused an error on the server side (e.g. an invalid handle was specified)',
+    16: 'simx_return_split_progress_flag; The communication thread is still processing previous split command of the same type',
+    32: 'simx_return_local_error_flag; The function caused an error on the client side',
+    64: 'simx_return_initialize_error_flag; simxStart was not yet called'
+}
 
-# OUTPUT ports have platform specific values that we must import
-platform = get_current_platform()
+OUTPUT_A = 'Motor_A'
+OUTPUT_B = 'Motor_B'
+OUTPUT_C = 'Motor_C'
+OUTPUT_D = 'Motor_D'
 
-if platform == 'sim':
-    from ev3dev2._platform.sim import OUTPUT_A, OUTPUT_B, OUTPUT_C, OUTPUT_D  # noqa: F401
-
-else:
-    raise Exception("Unsupported platform '%s'" % platform)
-
-if sys.version_info < (3, 4):
-    raise SystemError('Must be using Python 3.4 or higher')
-
-log = getLogger(__name__)
-
-# The number of milliseconds we wait for the state of a motor to
-# update to 'running' in the "on_for_XYZ" methods of the Motor class
-WAIT_RUNNING_TIMEOUT = 100
+CONNECT = not True
+VERBOSE = not True
+if VERBOSE:
+    print("vrep imported")
 
 
-class SpeedInvalid(ValueError):
-    pass
+def finish(sig=-1):
+    "wrapper for vrep command"
+    vrep.simxFinish(sig)
+
+
+def restart_simulation():
+    if ("clientID" in globals()) and VERBOSE:  # global question
+        print("global ID")
+    else:
+        print("connecting...")
+        global clientID
+        clientID = connection()
+
+    vrep.simxStopSimulation(clientID, vrep.simx_opmode_oneshot)
+    vrep.simxStartSimulation(clientID, vrep.simx_opmode_oneshot)
+
+
+def connection(connectionAddress='127.0.0.1',
+                connectionPort=19999,
+                waitUntilConnected=True,
+                doNotReconnectOnceDisconnected=True,
+                timeOutInMs=5000,
+                commThreadCycleInMs=5,
+                dummy=False):
+    """wrapper for connection with vrep server"""
+    global clientID
+
+    if dummy:
+        return 666
+
+    finish(-1)  #wrapper for vrep.simxFinish
+    clientID = vrep.simxStart(connectionAddress,
+                    connectionPort,
+                    waitUntilConnected,
+                    doNotReconnectOnceDisconnected,
+                    timeOutInMs,
+                    commThreadCycleInMs)
+
+    if VERBOSE:
+        if clientID != -1:
+            print('Connected to remote server')
+        else:
+            print('Not connected')
+            sys.exit('Could not connect')
+
+    return clientID
 
 
 class SpeedValue(object):
     """
-    A base class for other unit types. Don't use this directly; instead, see
-    :class:`SpeedPercent`, :class:`SpeedRPS`, :class:`SpeedRPM`,
-    :class:`SpeedDPS`, and :class:`SpeedDPM`.
+    A base class for other unit types.
+    Don't use this directly; instead, see
+    :class:`SpeedPercent`,
+    :class:`SpeedRPS`,
+    :class:`SpeedRPM`,
+    :class:`SpeedDPS`, and
+    :class:`SpeedDPM`.
     """
+
     def __eq__(self, other):
         return self.to_native_units() == other.to_native_units()
 
@@ -93,48 +125,60 @@ class SpeedPercent(SpeedValue):
     """
     Speed as a percentage of the motor's maximum rated speed.
     """
-    def __init__(self, percent, desc=None, max_speed=900):
-        if percent < -max_speed or percent > max_speed:
-            raise SpeedInvalid("invalid percentage {}, must be between -{} and {} (inclusive)".format(percent, max_speed, max_speed))
+    # max_speed = 18.326
+
+    def __init__(self, percent):
+        f"{percent} must be between \
+             -100 and 100 (inclusive)"
         self.percent = percent
-        self.desc = desc
+
+    @property
+    def percent(self):
+        return self.__percent
+
+    @percent.setter
+    def percent(self, val):
+        if val > 100:
+            self.__percent = 100
+        if val < -100:
+            self.__percent = -100
+        self.__percent = val
 
     def __str__(self):
-        return "{} ".format(self.desc) if self.desc else "" + str(self.percent) + "%"
+        return str(self.percent) + "%"
 
     def __mul__(self, other):
-        assert isinstance(other, (float, int)), "{} can only be multiplied by an int or float".format(self)
+        assert isinstance(other, (float, int)), \
+            f"{self} can only be multiplied by an int or float"
         return SpeedPercent(self.percent * other)
 
     def to_native_units(self, motor):
         """
         Return this SpeedPercent in native motor units
         """
-        return self.percent / max_speed * motor.max_speed
+        return self.percent / 100 * motor.max_speed
 
 
 class SpeedNativeUnits(SpeedValue):
     """
     Speed in tacho counts per second.
     """
-    def __init__(self, native_counts, desc=None):
+
+    def __init__(self, native_counts):
         self.native_counts = native_counts
-        self.desc = desc
 
     def __str__(self):
-        return "{} ".format(self.desc) if self.desc else "" + "{:.2f}".format(self.native_counts) + " counts/sec"
+        return "{:.2f}".format(self.native_counts) + " counts/sec"
 
     def __mul__(self, other):
-        assert isinstance(other, (float, int)), "{} can only be multiplied by an int or float".format(self)
+        assert isinstance(other, (float, int)), \
+            f"{self} can only be multiplied by an int or float"
         return SpeedNativeUnits(self.native_counts * other)
 
     def to_native_units(self, motor=None):
         """
         Return this SpeedNativeUnits as a number
         """
-        if self.native_counts > motor.max_speed:
-            raise SpeedInvalid("invalid native-units: {} max speed {}, {} was requested".format(
-                motor, motor.max_speed, self.native_counts))
         return self.native_counts
 
 
@@ -142,24 +186,27 @@ class SpeedRPS(SpeedValue):
     """
     Speed in rotations-per-second.
     """
-    def __init__(self, rotations_per_second, desc=None):
+
+    def __init__(self, rotations_per_second):
         self.rotations_per_second = rotations_per_second
-        self.desc = desc
 
     def __str__(self):
-        return "{} ".format(self.desc) if self.desc else "" + str(self.rotations_per_second) + " rot/sec"
+        return str(self.rotations_per_second) + " rot/sec"
 
     def __mul__(self, other):
-        assert isinstance(other, (float, int)), "{} can only be multiplied by an int or float".format(self)
+        assert isinstance(other, (float, int)), \
+            f"{self} can only be multiplied by an int or float"
         return SpeedRPS(self.rotations_per_second * other)
 
     def to_native_units(self, motor):
         """
-        Return the native speed measurement required to achieve desired rotations-per-second
+        Return the native speed measurement required to achieve
+        desired rotations-per-second
         """
-        if abs(self.rotations_per_second) > motor.max_rps:
-            raise SpeedInvalid("invalid rotations-per-second: {} max RPS is {}, {} was requested".format(
-                motor, motor.max_rps, self.rotations_per_second))
+        assert abs(self.rotations_per_second) <= motor.max_rps,\
+            f"invalid rotations-per-second: \
+            {motor} max RPS is {motor.max_rps}, \
+            {self.rotations_per_second} was requested"
         return self.rotations_per_second / motor.max_rps * motor.max_speed
 
 
@@ -167,24 +214,27 @@ class SpeedRPM(SpeedValue):
     """
     Speed in rotations-per-minute.
     """
-    def __init__(self, rotations_per_minute, desc=None):
+
+    def __init__(self, rotations_per_minute):
         self.rotations_per_minute = rotations_per_minute
-        self.desc = desc
 
     def __str__(self):
-        return "{} ".format(self.desc) if self.desc else "" + str(self.rotations_per_minute) + " rot/min"
+        return str(self.rotations_per_minute) + " rot/min"
 
     def __mul__(self, other):
-        assert isinstance(other, (float, int)), "{} can only be multiplied by an int or float".format(self)
+        assert isinstance(other, (float, int)), \
+        f"{self} can only be multiplied by an int or float"
         return SpeedRPM(self.rotations_per_minute * other)
 
     def to_native_units(self, motor):
         """
-        Return the native speed measurement required to achieve desired rotations-per-minute
+        Return the native speed measurement required to achieve
+        desired rotations-per-minute
         """
-        if abs(self.rotations_per_minute) > motor.max_rpm:
-            raise SpeedInvalid("invalid rotations-per-minute: {} max RPM is {}, {} was requested".format(
-                motor, motor.max_rpm, self.rotations_per_minute))
+        assert abs(self.rotations_per_minute) <= motor.max_rpm,\
+            "invalid rotations-per-minute: {} max RPM is {}, {} \
+            was requested".format(
+            motor, motor.max_rpm, self.rotations_per_minute)
         return self.rotations_per_minute / motor.max_rpm * motor.max_speed
 
 
@@ -192,24 +242,27 @@ class SpeedDPS(SpeedValue):
     """
     Speed in degrees-per-second.
     """
-    def __init__(self, degrees_per_second, desc=None):
+
+    def __init__(self, degrees_per_second):
         self.degrees_per_second = degrees_per_second
-        self.desc = desc
 
     def __str__(self):
-        return "{} ".format(self.desc) if self.desc else "" + str(self.degrees_per_second) + " deg/sec"
+        return str(self.degrees_per_second) + " deg/sec"
 
     def __mul__(self, other):
-        assert isinstance(other, (float, int)), "{} can only be multiplied by an int or float".format(self)
+        assert isinstance(other, (float, int)), \
+        "{} can only be multiplied by an int or float".format(self)
         return SpeedDPS(self.degrees_per_second * other)
 
     def to_native_units(self, motor):
         """
-        Return the native speed measurement required to achieve desired degrees-per-second
+        Return the native speed measurement required to achieve
+        desired degrees-per-second
         """
-        if abs(self.degrees_per_second) > motor.max_dps:
-            raise SpeedInvalid("invalid degrees-per-second: {} max DPS is {}, {} was requested".format(
-                motor, motor.max_dps, self.degrees_per_second))
+        assert abs(self.degrees_per_second) <= motor.max_dps,\
+            "invalid degrees-per-second: {} max DPS is {}, {} \
+            was requested".format(
+            motor, motor.max_dps, self.degrees_per_second)
         return self.degrees_per_second / motor.max_dps * motor.max_speed
 
 
@@ -217,922 +270,417 @@ class SpeedDPM(SpeedValue):
     """
     Speed in degrees-per-minute.
     """
-    def __init__(self, degrees_per_minute, desc=None):
+
+    def __init__(self, degrees_per_minute):
         self.degrees_per_minute = degrees_per_minute
-        self.desc = desc
 
     def __str__(self):
-        return "{} ".format(self.desc) if self.desc else "" + str(self.degrees_per_minute) + " deg/min"
+        return str(self.degrees_per_minute) + " deg/min"
 
     def __mul__(self, other):
-        assert isinstance(other, (float, int)), "{} can only be multiplied by an int or float".format(self)
+        assert isinstance(other, (float, int)), \
+        "{} can only be multiplied by an int or float".format(self)
         return SpeedDPM(self.degrees_per_minute * other)
 
     def to_native_units(self, motor):
         """
-        Return the native speed measurement required to achieve desired degrees-per-minute
+        Return the native speed measurement required to achieve
+        desired degrees-per-minute
         """
-        if abs(self.degrees_per_minute) > motor.max_dpm:
-            raise SpeedInvalid("invalid degrees-per-minute: {} max DPM is {}, {} was requested".format(
-                motor, motor.max_dpm, self.degrees_per_minute))
+        assert abs(self.degrees_per_minute) <= motor.max_dpm,\
+            "invalid degrees-per-minute: {} max DPM is {}, {} \
+            was requested".format(
+            motor, motor.max_dpm, self.degrees_per_minute)
         return self.degrees_per_minute / motor.max_dpm * motor.max_speed
 
 
-def speed_to_speedvalue(speed, desc=None):
+class Wheel:
     """
-    If ``speed`` is not a ``SpeedValue`` object, treat it as a percentage.
-    Returns a ``SpeedValue`` object.
+    Wheel
+
+    Args:
+        radius (float)
+        width (float)
+        **kwargs (dict): note, that named args have precedence over kwargs
+
+    Attributes:
+        radius:
+
     """
-    if isinstance(speed, SpeedValue):
-        return speed
-    else:
-        return SpeedPercent(speed, desc)
+    def __init__(self, radius=None, width=None, **kwargs):
+        self.kwargs = kwargs
+        self.radius = radius
+        self.width = width
+        self.circumference = None
+
+    @property
+    def radius(self):
+        return self._radius
+
+    @radius.setter
+    def radius(self, var):
+        assert isinstance(var, (int, float))
+        self._radius = var
+
+    @property
+    def width(self):
+        return self._width
+
+    @width.setter
+    def width(self, var):
+        assert isinstance(var, (int, float))
+        self._width = var
+
+    @property
+    def circumference(self):
+        return self._circumference
+
+    @circumference.setter
+    def circumference(self, var):
+        from math import pi
+        self._circumference = 2 * pi * self.radius
+
+    def __str__(self):
+        if 'description' not in self.kwargs:
+            ret = f"Wheel of radius {self.radius} "
+            ret += f"and cicrumference {self.circumference}"
+        else:
+            ret = str(self.kwargs['description'])
+        return ret
+
+    def __repr__(self):
+        return self.__str__()
 
 
-class Motor(Device):
+class LegoWheel_41896c04(Wheel):
     """
-    The motor class provides a uniform interface for using motors with
-    positional and directional feedback such as the EV3 and NXT motors.
-    This feedback allows for precise control of the motors. This is the
-    most common type of motor, so we just call it ``motor``.
+    Standard Lego Wheel and Tire assembly 41896c04
+
+    Wheel 43.2mm D. x 26mm Technic Racing Small,
+    3 Pin Holes with Black Tire 56 x 28 ZR Street (41896 / 41897)
+    """
+    diameter = 56
+    width = 28
+    units = 'mm'
+
+    def __init__(self):
+        super().__init__(
+            radius=__class__.diameter / 2,
+            width=__class__.width,
+            units=__class__.units
+        )
+
+
+class MotorSet(object):
+    """
+    The MotorSet object is a parent class for collection of Lego motors
+
+    Args:
+        motor_specs (dict):
+        {
+            OUTPUT_A : LargeMotor,
+            OUTPUT_C : LargeMotor,
+        }
+        desc (str, optional): contains description of the motors
+
+    Attributes:
+        motors (ordered dict): containes motors' names and descriptions
+        desc (str): contains description of the motors
     """
 
-    SYSTEM_CLASS_NAME = 'tacho-motor'
-    SYSTEM_DEVICE_NAME_CONVENTION = '*'
+    def __init__(self, motor_specs, desc=None):
 
-    __slots__ = [
-        '_address',
-        '_command',
-        '_commands',
-        '_count_per_rot',
-        '_count_per_m',
-        '_driver_name',
-        '_duty_cycle',
-        '_duty_cycle_sp',
-        '_full_travel_count',
-        '_polarity',
-        '_position',
-        '_position_p',
-        '_position_i',
-        '_position_d',
-        '_position_sp',
-        '_max_speed',
-        '_speed',
-        '_speed_sp',
-        '_ramp_up_sp',
-        '_ramp_down_sp',
-        '_speed_p',
-        '_speed_i',
-        '_speed_d',
-        '_state',
-        '_stop_action',
-        '_stop_actions',
-        '_time_sp',
-        '_poll',
-        'max_rps',
-        'max_rpm',
-        'max_dps',
-        'max_dpm',
-    ]
+        self.motors = OrderedDict()
+        # actual port names
+        for motor_port in sorted(motor_specs.keys()):
+            motor_class = motor_specs[motor_port]
+            self.motors[motor_port] = motor_class(motor_port)
+            self.motors[motor_port].reset()
 
-    #: Run the motor until another command is sent.
-    COMMAND_RUN_FOREVER = 'run-forever'
+        # left/right wheel
+        for motor_port in desc:
+            self.motors[motor_port] = self.motors[desc[motor_port]]
+        self.desc = desc
 
-    #: Run to an absolute position specified by ``position_sp`` and then
-    #: stop using the action specified in ``stop_action``.
-    COMMAND_RUN_TO_ABS_POS = 'run-to-abs-pos'
+    def __str__(self):
+        if self.desc:
+            if isinstance(self.desc, str):
+                return self.desc
+            else:
+                return str(self.desc)
+        else:
+            return self.__class__.__name__
 
-    #: Run to a position relative to the current ``position`` value.
-    #: The new position will be current ``position`` + ``position_sp``.
-    #: When the new position is reached, the motor will stop using
-    #: the action specified by ``stop_action``.
-    COMMAND_RUN_TO_REL_POS = 'run-to-rel-pos'
+    def set_args(self, **kwargs):
+        motors = kwargs.get('motors', self.motors.values())
 
-    #: Run the motor for the amount of time specified in ``time_sp``
-    #: and then stop the motor using the action specified by ``stop_action``.
-    COMMAND_RUN_TIMED = 'run-timed'
+        for motor in motors:
+            for key in kwargs:
+                if key != 'motors':
+                    try:
+                        setattr(motor, key, kwargs[key])
+                    except AttributeError as e:
+                        # log.error("%s %s cannot set %s to %s" % (self, motor,
+                        #           key, kwargs[key]))
+                        raise e
 
-    #: Run the motor at the duty cycle specified by ``duty_cycle_sp``.
-    #: Unlike other run commands, changing ``duty_cycle_sp`` while running *will*
-    #: take effect immediately.
-    COMMAND_RUN_DIRECT = 'run-direct'
+    def set_polarity(self, polarity, motors=None):
+        raise NotImplementedError
+        pass
 
-    #: Stop any of the run commands before they are complete using the
-    #: action specified by ``stop_action``.
-    COMMAND_STOP = 'stop'
+    def _run_command(self, **kwargs):
+        motors = kwargs.get('motors', self.motors.values())
 
-    #: Reset all of the motor parameter attributes to their default value.
-    #: This will also have the effect of stopping the motor.
-    COMMAND_RESET = 'reset'
+        for motor in motors:
+            for key in kwargs:
+                if key not in ('motors', 'commands'):
+                    setattr(motor, key, kwargs[key])
 
-    #: Sets the normal polarity of the rotary encoder.
-    ENCODER_POLARITY_NORMAL = 'normal'
+        for motor in motors:
+            motor.command = kwargs['command']
+            #log.debug("%s: %s command %s" % (self, motor, kwargs['command']))
 
-    #: Sets the inversed polarity of the rotary encoder.
-    ENCODER_POLARITY_INVERSED = 'inversed'
 
-    #: With ``normal`` polarity, a positive duty cycle will
-    #: cause the motor to rotate clockwise.
-    POLARITY_NORMAL = 'normal'
+class Motor:
+    """Motor class"""
+    ev3def = {
+              'MOTION_TORQUE': 0.2,
+              'REST_TORQUE': 0.4,
+              'max_speed': 18.326,
+              'MAX_SPEED': 18.326,
+              'wheel': LegoWheel_41896c04(),
+              }
 
-    #: With ``inversed`` polarity, a positive duty cycle will
-    #: cause the motor to rotate counter-clockwise.
-    POLARITY_INVERSED = 'inversed'
+    def __init__(self, address=None, **kwargs):
+        self.kwargs = kwargs
 
-    #: Power is being sent to the motor.
-    STATE_RUNNING = 'running'
-
-    #: The motor is ramping up or down and has not yet reached a constant output level.
-    STATE_RAMPING = 'ramping'
-
-    #: The motor is not turning, but rather attempting to hold a fixed position.
-    STATE_HOLDING = 'holding'
-
-    #: The motor is turning, but cannot reach its ``speed_sp``.
-    STATE_OVERLOADED = 'overloaded'
-
-    #: The motor is not turning when it should be.
-    STATE_STALLED = 'stalled'
-
-    #: Power will be removed from the motor and it will freely coast to a stop.
-    STOP_ACTION_COAST = 'coast'
-
-    #: Power will be removed from the motor and a passive electrical load will
-    #: be placed on the motor. This is usually done by shorting the motor terminals
-    #: together. This load will absorb the energy from the rotation of the motors and
-    #: cause the motor to stop more quickly than coasting.
-    STOP_ACTION_BRAKE = 'brake'
-
-    #: Does not remove power from the motor. Instead it actively try to hold the motor
-    #: at the current position. If an external force tries to turn the motor, the motor
-    #: will ``push back`` to maintain its position.
-    STOP_ACTION_HOLD = 'hold'
-
-    def __init__(self, address=None, name_pattern=SYSTEM_DEVICE_NAME_CONVENTION, name_exact=False, **kwargs):
-
-        if platform in ('brickpi', 'brickpi3') and type(self).__name__ != 'Motor' and not isinstance(self, LargeMotor):
-            raise Exception("{} is unaware of different motor types, use LargeMotor instead".format(platform))
+        if 'B' in address:
+            self.int_motor = 1
+            self.str_motor = 'B'
+            self.kwargs['int motor'] = 1
+            self.kwargs['str motor'] = 'B'
+            address = "Motor_B"
+        elif 'C' in address:
+            self.int_motor = 2
+            self.str_motor = 'C'
+            self.kwargs['int motor'] = 2
+            self.kwargs['str motor'] = 'C'
+            address = "Motor_C"
+        else:
+            raise ValueError('Not a TANK MODE, address single motor')
 
         if address is not None:
-            kwargs['address'] = address
-        super(Motor, self).__init__(self.SYSTEM_CLASS_NAME, name_pattern, name_exact, **kwargs)
+            self.kwargs['address'] = address
+        self.kwargs.update(Motor.ev3def)
+        self.address = address
 
-        self._address = None
-        self._command = None
-        self._commands = None
-        self._count_per_rot = None
-        self._count_per_m = None
-        self._driver_name = None
-        self._duty_cycle = None
-        self._duty_cycle_sp = None
-        self._full_travel_count = None
-        self._polarity = None
-        self._position = None
-        self._position_p = None
-        self._position_i = None
-        self._position_d = None
-        self._position_sp = None
-        self._max_speed = None
-        self._speed = None
-        self._speed_sp = None
-        self._ramp_up_sp = None
-        self._ramp_down_sp = None
-        self._speed_p = None
-        self._speed_i = None
-        self._speed_d = None
-        self._state = None
-        self._stop_action = None
-        self._stop_actions = None
-        self._time_sp = None
-        self._poll = None
-        self.max_rps = float(self.max_speed / self.count_per_rot)
-        self.max_rpm = self.max_rps * 60
-        self.max_dps = self.max_rps * 360
-        self.max_dpm = self.max_rpm * 360
+        if 'max_speed' not in self.kwargs:
+            self.kwargs['max_speed'] = Motor.ev3def['max_speed']
+        self.max_speed = self.kwargs['max_speed']
 
-    @property
-    def address(self):
-        """
-        Returns the name of the port that this motor is connected to.
-        """
-        self._address, value = self.get_attr_string(self._address, 'address')
-        return value
+        if "clientID" in self.kwargs:  # local preference
+            self.clientID = self.kwargs['clientID']
+        elif "clientID" in globals():  # global question
+            if VERBOSE:
+                print("global ID")
+            self.clientID = clientID
+            self.kwargs['clientID'] = clientID
+        else:
+            self.kwargs['clientID'] = connection(dummy=not True)
 
-    @property
-    def command(self):
-        """
-        Sends a command to the motor controller. See ``commands`` for a list of
-        possible values.
-        """
-        raise Exception("command is a write-only property!")
+        # vrep
+        eC, motor = vrep.simxGetObjectHandle(self.kwargs['clientID'],
+                self.kwargs.get('address'), vrep.simx_opmode_oneshot_wait)
+        self.motor = motor
+        self.handle = motor
+        self.kwargs['handle'] = motor
+        self.kwargs['motor'] = motor
 
-    @command.setter
-    def command(self, value):
-        self._command = self.set_attr_string(self._command, 'command', value)
+        if 'state' in self.kwargs:
+            self.state = self.kwargs.get('state')
+        else:
+            self.kwargs['state'] = 'break'
 
-    @property
-    def commands(self):
-        """
-        Returns a list of commands that are supported by the motor
-        controller. Possible values are ``run-forever``, ``run-to-abs-pos``, ``run-to-rel-pos``,
-        ``run-timed``, ``run-direct``, ``stop`` and ``reset``. Not all commands may be supported.
+    def initialize_motor(self):
+        # wait (10-20ms) for robot to send back the data...
+        rC = 1
+        while rC != vrep.simx_error_noerror:
+            rC, ini_wheel_pos = vrep.simxGetJointPosition(
+                self.kwargs['clientID'],
+                self.kwargs.get('motor'),
+                vrep.simx_opmode_oneshot)
 
-        - ``run-forever`` will cause the motor to run until another command is sent.
-        - ``run-to-abs-pos`` will run to an absolute position specified by ``position_sp``
-          and then stop using the action specified in ``stop_action``.
-        - ``run-to-rel-pos`` will run to a position relative to the current ``position`` value.
-          The new position will be current ``position`` + ``position_sp``. When the new
-          position is reached, the motor will stop using the action specified by ``stop_action``.
-        - ``run-timed`` will run the motor for the amount of time specified in ``time_sp``
-          and then stop the motor using the action specified by ``stop_action``.
-        - ``run-direct`` will run the motor at the duty cycle specified by ``duty_cycle_sp``.
-          Unlike other run commands, changing ``duty_cycle_sp`` while running *will*
-          take effect immediately.
-        - ``stop`` will stop any of the run commands before they are complete using the
-          action specified by ``stop_action``.
-        - ``reset`` will reset all of the motor parameter attributes to their default value.
-          This will also have the effect of stopping the motor.
-        """
-        (self._commands, value) = self.get_cached_attr_set(self._commands, 'commands')
-        return value
+        return rC, ini_wheel_pos
 
-    @property
-    def count_per_rot(self):
-        """
-        Returns the number of tacho counts in one rotation of the motor. Tacho counts
-        are used by the position and speed attributes, so you can use this value
-        to convert rotations or degrees to tacho counts. (rotation motors only)
-        """
-        (self._count_per_rot, value) = self.get_cached_attr_int(self._count_per_rot, 'count_per_rot')
-        return value
-
-    @property
-    def count_per_m(self):
-        """
-        Returns the number of tacho counts in one meter of travel of the motor. Tacho
-        counts are used by the position and speed attributes, so you can use this
-        value to convert from distance to tacho counts. (linear motors only)
-        """
-        (self._count_per_m, value) = self.get_cached_attr_int(self._count_per_m, 'count_per_m')
-        return value
-
-    @property
-    def driver_name(self):
-        """
-        Returns the name of the driver that provides this tacho motor device.
-        """
-        (self._driver_name, value) = self.get_cached_attr_string(self._driver_name, 'driver_name')
-        return value
-
-    @property
-    def duty_cycle(self):
-        """
-        Returns the current duty cycle of the motor. Units are percent. Values
-        are -100 to 100.
-        """
-        self._duty_cycle, value = self.get_attr_int(self._duty_cycle, 'duty_cycle')
-        return value
-
-    @property
-    def duty_cycle_sp(self):
-        """
-        Writing sets the duty cycle setpoint. Reading returns the current value.
-        Units are in percent. Valid values are -100 to 100. A negative value causes
-        the motor to rotate in reverse.
-        """
-        self._duty_cycle_sp, value = self.get_attr_int(self._duty_cycle_sp, 'duty_cycle_sp')
-        return value
-
-    @duty_cycle_sp.setter
-    def duty_cycle_sp(self, value):
-        self._duty_cycle_sp = self.set_attr_int(self._duty_cycle_sp, 'duty_cycle_sp', value)
-
-    @property
-    def full_travel_count(self):
-        """
-        Returns the number of tacho counts in the full travel of the motor. When
-        combined with the ``count_per_m`` atribute, you can use this value to
-        calculate the maximum travel distance of the motor. (linear motors only)
-        """
-        (self._full_travel_count, value) = self.get_cached_attr_int(self._full_travel_count, 'full_travel_count')
-        return value
-
-    @property
-    def polarity(self):
-        """
-        Sets the polarity of the motor. With ``normal`` polarity, a positive duty
-        cycle will cause the motor to rotate clockwise. With ``inversed`` polarity,
-        a positive duty cycle will cause the motor to rotate counter-clockwise.
-        Valid values are ``normal`` and ``inversed``.
-        """
-        self._polarity, value = self.get_attr_string(self._polarity, 'polarity')
-        return value
-
-    @polarity.setter
-    def polarity(self, value):
-        self._polarity = self.set_attr_string(self._polarity, 'polarity', value)
-
-    @property
-    def position(self):
-        """
-        Returns the current position of the motor in pulses of the rotary
-        encoder. When the motor rotates clockwise, the position will increase.
-        Likewise, rotating counter-clockwise causes the position to decrease.
-        Writing will set the position to that value.
-        """
-        self._position, value = self.get_attr_int(self._position, 'position')
-        return value
-
-    @position.setter
-    def position(self, value):
-        self._position = self.set_attr_int(self._position, 'position', value)
-
-    @property
-    def position_p(self):
-        """
-        The proportional constant for the position PID.
-        """
-        self._position_p, value = self.get_attr_int(self._position_p, 'hold_pid/Kp')
-        return value
-
-    @position_p.setter
-    def position_p(self, value):
-        self._position_p = self.set_attr_int(self._position_p, 'hold_pid/Kp', value)
-
-    @property
-    def position_i(self):
-        """
-        The integral constant for the position PID.
-        """
-        self._position_i, value = self.get_attr_int(self._position_i, 'hold_pid/Ki')
-        return value
-
-    @position_i.setter
-    def position_i(self, value):
-        self._position_i = self.set_attr_int(self._position_i, 'hold_pid/Ki', value)
-
-    @property
-    def position_d(self):
-        """
-        The derivative constant for the position PID.
-        """
-        self._position_d, value = self.get_attr_int(self._position_d, 'hold_pid/Kd')
-        return value
-
-    @position_d.setter
-    def position_d(self, value):
-        self._position_d = self.set_attr_int(self._position_d, 'hold_pid/Kd', value)
-
-    @property
-    def position_sp(self):
-        """
-        Writing specifies the target position for the ``run-to-abs-pos`` and ``run-to-rel-pos``
-        commands. Reading returns the current value. Units are in tacho counts. You
-        can use the value returned by ``count_per_rot`` to convert tacho counts to/from
-        rotations or degrees.
-        """
-        self._position_sp, value = self.get_attr_int(self._position_sp, 'position_sp')
-        return value
-
-    @position_sp.setter
-    def position_sp(self, value):
-        self._position_sp = self.set_attr_int(self._position_sp, 'position_sp', value)
-
-    @property
-    def max_speed(self):
-        """
-        Returns the maximum value that is accepted by the ``speed_sp`` attribute. This
-        may be slightly different than the maximum speed that a particular motor can
-        reach - it's the maximum theoretical speed.
-        """
-        (self._max_speed, value) = self.get_cached_attr_int(self._max_speed, 'max_speed')
-        return value
-
-    @property
-    def speed(self):
-        """
-        Returns the current motor speed in tacho counts per second. Note, this is
-        not necessarily degrees (although it is for LEGO motors). Use the ``count_per_rot``
-        attribute to convert this value to RPM or deg/sec.
-        """
-        self._speed, value = self.get_attr_int(self._speed, 'speed')
-        return value
-
-    @property
-    def speed_sp(self):
-        """
-        Writing sets the target speed in tacho counts per second used for all ``run-*``
-        commands except ``run-direct``. Reading returns the current value. A negative
-        value causes the motor to rotate in reverse with the exception of ``run-to-*-pos``
-        commands where the sign is ignored. Use the ``count_per_rot`` attribute to convert
-        RPM or deg/sec to tacho counts per second. Use the ``count_per_m`` attribute to
-        convert m/s to tacho counts per second.
-        """
-        self._speed_sp, value = self.get_attr_int(self._speed_sp, 'speed_sp')
-        return value
-
-    @speed_sp.setter
-    def speed_sp(self, value):
-        self._speed_sp = self.set_attr_int(self._speed_sp, 'speed_sp', value)
-
-    @property
-    def ramp_up_sp(self):
-        """
-        Writing sets the ramp up setpoint. Reading returns the current value. Units
-        are in milliseconds and must be positive. When set to a non-zero value, the
-        motor speed will increase from 0 to 100% of ``max_speed`` over the span of this
-        setpoint. The actual ramp time is the ratio of the difference between the
-        ``speed_sp`` and the current ``speed`` and max_speed multiplied by ``ramp_up_sp``.
-        """
-        self._ramp_up_sp, value = self.get_attr_int(self._ramp_up_sp, 'ramp_up_sp')
-        return value
-
-    @ramp_up_sp.setter
-    def ramp_up_sp(self, value):
-        self._ramp_up_sp = self.set_attr_int(self._ramp_up_sp, 'ramp_up_sp', value)
-
-    @property
-    def ramp_down_sp(self):
-        """
-        Writing sets the ramp down setpoint. Reading returns the current value. Units
-        are in milliseconds and must be positive. When set to a non-zero value, the
-        motor speed will decrease from 0 to 100% of ``max_speed`` over the span of this
-        setpoint. The actual ramp time is the ratio of the difference between the
-        ``speed_sp`` and the current ``speed`` and max_speed multiplied by ``ramp_down_sp``.
-        """
-        self._ramp_down_sp, value = self.get_attr_int(self._ramp_down_sp, 'ramp_down_sp')
-        return value
-
-    @ramp_down_sp.setter
-    def ramp_down_sp(self, value):
-        self._ramp_down_sp = self.set_attr_int(self._ramp_down_sp, 'ramp_down_sp', value)
-
-    @property
-    def speed_p(self):
-        """
-        The proportional constant for the speed regulation PID.
-        """
-        self._speed_p, value = self.get_attr_int(self._speed_p, 'speed_pid/Kp')
-        return value
-
-    @speed_p.setter
-    def speed_p(self, value):
-        self._speed_p = self.set_attr_int(self._speed_p, 'speed_pid/Kp', value)
-
-    @property
-    def speed_i(self):
-        """
-        The integral constant for the speed regulation PID.
-        """
-        self._speed_i, value = self.get_attr_int(self._speed_i, 'speed_pid/Ki')
-        return value
-
-    @speed_i.setter
-    def speed_i(self, value):
-        self._speed_i = self.set_attr_int(self._speed_i, 'speed_pid/Ki', value)
-
-    @property
-    def speed_d(self):
-        """
-        The derivative constant for the speed regulation PID.
-        """
-        self._speed_d, value = self.get_attr_int(self._speed_d, 'speed_pid/Kd')
-        return value
-
-    @speed_d.setter
-    def speed_d(self, value):
-        self._speed_d = self.set_attr_int(self._speed_d, 'speed_pid/Kd', value)
-
-    @property
-    def state(self):
-        """
-        Reading returns a list of state flags. Possible flags are
-        ``running``, ``ramping``, ``holding``, ``overloaded`` and ``stalled``.
-        """
-        self._state, value = self.get_attr_set(self._state, 'state')
-        return value
-
-    @property
-    def stop_action(self):
-        """
-        Reading returns the current stop action. Writing sets the stop action.
-        The value determines the motors behavior when ``command`` is set to ``stop``.
-        Also, it determines the motors behavior when a run command completes. See
-        ``stop_actions`` for a list of possible values.
-        """
-        self._stop_action, value = self.get_attr_string(self._stop_action, 'stop_action')
-        return value
-
-    @stop_action.setter
-    def stop_action(self, value):
-        self._stop_action = self.set_attr_string(self._stop_action, 'stop_action', value)
-
-    @property
-    def stop_actions(self):
-        """
-        Returns a list of stop actions supported by the motor controller.
-        Possible values are ``coast``, ``brake`` and ``hold``. ``coast`` means that power will
-        be removed from the motor and it will freely coast to a stop. ``brake`` means
-        that power will be removed from the motor and a passive electrical load will
-        be placed on the motor. This is usually done by shorting the motor terminals
-        together. This load will absorb the energy from the rotation of the motors and
-        cause the motor to stop more quickly than coasting. ``hold`` does not remove
-        power from the motor. Instead it actively tries to hold the motor at the current
-        position. If an external force tries to turn the motor, the motor will 'push
-        back' to maintain its position.
-        """
-        (self._stop_actions, value) = self.get_cached_attr_set(self._stop_actions, 'stop_actions')
-        return value
-
-    @property
-    def time_sp(self):
-        """
-        Writing specifies the amount of time the motor will run when using the
-        ``run-timed`` command. Reading returns the current value. Units are in
-        milliseconds.
-        """
-        self._time_sp, value = self.get_attr_int(self._time_sp, 'time_sp')
-        return value
-
-    @time_sp.setter
-    def time_sp(self, value):
-        self._time_sp = self.set_attr_int(self._time_sp, 'time_sp', value)
-
-    def run_forever(self, **kwargs):
-        """
-        Run the motor until another command is sent.
-        """
-        for key in kwargs:
-            setattr(self, key, kwargs[key])
-        self.command = self.COMMAND_RUN_FOREVER
-
-    def run_to_abs_pos(self, **kwargs):
-        """
-        Run to an absolute position specified by ``position_sp`` and then
-        stop using the action specified in ``stop_action``.
-        """
-        for key in kwargs:
-            setattr(self, key, kwargs[key])
-        self.command = self.COMMAND_RUN_TO_ABS_POS
-
-    def run_to_rel_pos(self, **kwargs):
-        """
-        Run to a position relative to the current ``position`` value.
-        The new position will be current ``position`` + ``position_sp``.
-        When the new position is reached, the motor will stop using
-        the action specified by ``stop_action``.
-        """
-        for key in kwargs:
-            setattr(self, key, kwargs[key])
-        self.command = self.COMMAND_RUN_TO_REL_POS
-
-    def run_timed(self, **kwargs):
-        """
-        Run the motor for the amount of time specified in ``time_sp``
-        and then stop the motor using the action specified by ``stop_action``.
-        """
-        for key in kwargs:
-            setattr(self, key, kwargs[key])
-        self.command = self.COMMAND_RUN_TIMED
-
-    def run_direct(self, **kwargs):
-        """
-        Run the motor at the duty cycle specified by ``duty_cycle_sp``.
-        Unlike other run commands, changing ``duty_cycle_sp`` while running *will*
-        take effect immediately.
-        """
-        for key in kwargs:
-            setattr(self, key, kwargs[key])
-        self.command = self.COMMAND_RUN_DIRECT
+    def full_stop(self):
+        errorCode = vrep.simxSetJointForce(
+            self.kwargs['clientID'],
+            self.kwargs.get('motor'),
+            self.kwargs['REST_TORQUE'],
+            vrep.simx_opmode_blocking)
+        errorCode = vrep.simxSetJointTargetVelocity(
+            self.kwargs['clientID'],
+            self.kwargs.get('motor'),
+            0,
+            vrep.simx_opmode_blocking)
 
     def stop(self, **kwargs):
-        """
-        Stop any of the run commands before they are complete using the
-        action specified by ``stop_action``.
-        """
-        for key in kwargs:
-            setattr(self, key, kwargs[key])
-        self.command = self.COMMAND_STOP
+        "..."
+        emptyBuff = bytearray()
+        out = vrep.simxCallScriptFunction(
+            clientID,
+            'Funciones',
+            vrep.sim_scripttype_childscript,
+            'Off',
+            [self.int_motor], [], [], emptyBuff,
+            vrep.simx_opmode_oneshot_wait
+        )
+        returnCode, outInts, outFloats, outStrings, outBuffer = out
+        return returnCode
 
-    def reset(self, **kwargs):
+    def run(self, speed_sp):
         """
-        Reset all of the motor parameter attributes to their default value.
-        This will also have the effect of stopping the motor.
+        speed (int/float): speed of motor, in [-MAX_SPEED, MAX_SPEED]
         """
-        for key in kwargs:
-            setattr(self, key, kwargs[key])
-        self.command = self.COMMAND_RESET
+        speed_sp = self._speed_native_units(speed_sp)
+        if VERBOSE:
+            print(f"speed: {speed_sp}")
 
-    @property
-    def is_running(self):
-        """
-        Power is being sent to the motor.
-        """
-        return self.STATE_RUNNING in self.state
+        emptyBuff = bytearray()
+        out = vrep.simxCallScriptFunction(
+            clientID,
+            'Funciones',
+            vrep.sim_scripttype_childscript,
+            'On',
+            [self.int_motor], [speed_sp], [], emptyBuff,
+            vrep.simx_opmode_oneshot_wait
+        )
+        returnCode, outInts, outFloats, outStrings, outBuffer = out
+        return returnCode
 
-    @property
-    def is_ramping(self):
-        """
-        The motor is ramping up or down and has not yet reached a constant output level.
-        """
-        return self.STATE_RAMPING in self.state
+    def run_forever(self, speed_sp):
+        return self.run(speed_sp)
 
-    @property
-    def is_holding(self):
-        """
-        The motor is not turning, but rather attempting to hold a fixed position.
-        """
-        return self.STATE_HOLDING in self.state
+    def runforever(self, speed_sp):
+        return self.run(speed_sp)
 
-    @property
-    def is_overloaded(self):
-        """
-        The motor is turning, but cannot reach its ``speed_sp``.
-        """
-        return self.STATE_OVERLOADED in self.state
+    def get_rotation(self):
+        "..."
 
-    @property
-    def is_stalled(self):
-        """
-        The motor is not turning when it should be.
-        """
-        return self.STATE_STALLED in self.state
-
-    def wait(self, cond, timeout=None):
-        """
-        Blocks until ``cond(self.state)`` is ``True``.  The condition is
-        checked when there is an I/O event related to the ``state`` attribute.
-        Exits early when ``timeout`` (in milliseconds) is reached.
-
-        Returns ``True`` if the condition is met, and ``False`` if the timeout
-        is reached.
-        """
-
-        tic = time.time()
-
-        if self._poll is None:
-            if self._state is None:
-                self._state = self._attribute_file_open('state')
-            self._poll = select.poll()
-            self._poll.register(self._state, select.POLLPRI)
-
-        # Set poll timeout to something small. For more details, see
-        # https://github.com/ev3dev/ev3dev-lang-python/issues/583
-        if timeout:
-            poll_tm = min(timeout, 100)
+        motor = self.str_motor
+        if 'B' in motor:
+            fun = 'MotorRotationCountB'
+        elif 'C' in motor:
+            fun = 'MotorRotationCountC'
         else:
-            poll_tm = 100
+            raise ValueError('motor = C or B')
 
-        while True:
-            # This check is now done every poll_tm even if poll has nothing to report:
-            if cond(self.state):
-                return True
+        emptyBuff = bytearray()
+        out = vrep.simxCallScriptFunction(
+            clientID,
+            'Funciones',
+            vrep.sim_scripttype_childscript,
+            fun,
+            [], [], [], emptyBuff,
+            vrep.simx_opmode_oneshot_wait
+        )
+        returnCode, outInts, outFloats, outStrings, outBuffer = out
+        return outInts[0] * 360
 
-            self._poll.poll(poll_tm)
+    def run_to_rel_pos(self, position_sp, speed_sp, **kwargs):
+        # if VERBOSE:
+        #     print(f"{__class__.__name__}.run_to_rel_pos: Partly implemented.")
 
-            if timeout is not None and time.time() >= tic + timeout / 1000:
-                # Final check when user timeout is reached
-                return cond(self.state)
+        # if kwargs.get('wait', False) == True:
+        #     optmode = vrep.simx_opmode_oneshot_wait
+        # else:
+        #     optmode = vrep.simx_opmode_streaming
 
-    def wait_until_not_moving(self, timeout=None):
-        """
-        Blocks until ``running`` is not in ``self.state`` or ``stalled`` is in
-        ``self.state``.  The condition is checked when there is an I/O event
-        related to the ``state`` attribute.  Exits early when ``timeout``
-        (in milliseconds) is reached.
+        speed_sp = self._speed_native_units(speed_sp)
+        self.reset_rotation_count()
 
-        Returns ``True`` if the condition is met, and ``False`` if the timeout
-        is reached.
+        while self.get_rotation() < position_sp:
+            rC = self.run(speed_sp)
 
-        Example::
+        self.stop()
+        # wait (10-20ms) for robot to send back the data...
+        # rC, ini_wheel_pos = self.initialize_motor()
 
-            m.wait_until_not_moving()
-        """
-        return self.wait(lambda state: self.STATE_RUNNING not in state or self.STATE_STALLED in state, timeout)
+        # an actuall motion
+        # iteration = 0
+        # wheel_pos = ini_wheel_pos
+        # position_sp_rad = math.radians(position_sp)
+        # while wheel_pos - ini_wheel_pos <= position_sp_rad:
+        #     # and iteration < 10:
+        #     iteration += 1
+        #
+        #     errorCodeJTV = vrep.simxSetJointTargetVelocity(
+        #         self.kwargs['clientID'],
+        #         self.kwargs.get('motor'),
+        #         speed_sp,
+        #         optmode)
+        #     errorCodeSJF = vrep.simxSetJointForce(
+        #         self.kwargs['clientID'],
+        #         self.kwargs.get('motor'),
+        #         self.kwargs['MOTION_TORQUE'],
+        #         optmode)
+        #     # positions of a wheel
+        #     errorCodeP, wheel_pos = vrep.simxGetJointPosition(
+        #         self.kwargs['clientID'],
+        #         self.kwargs.get('motor'),
+        #         optmode) #vrep.simx_opmode_streaming) #simx_opmode_oneshot)
 
-    def wait_until(self, s, timeout=None):
-        """
-        Blocks until ``s`` is in ``self.state``.  The condition is checked when
-        there is an I/O event related to the ``state`` attribute.  Exits early
-        when ``timeout`` (in milliseconds) is reached.
+            # if VERBOSE:
+            #     print("{}. ini:{} wheel:{} pos:{} speed:{}".format(
+            #         iteration, ini_wheel_pos,
+            #         wheel_pos, position_sp_rad,
+            #         speed_sp))
+            #     print("ERRORS: vel:{} pos:{} force:{} init:{}".format(
+            #         errorCodeJTV, errorCodeP,
+            #         errorCodeSJF, rC))
 
-        Returns ``True`` if the condition is met, and ``False`` if the timeout
-        is reached.
+        # full stop
+        # self.full_stop()
 
-        Example::
-
-            m.wait_until('stalled')
-        """
-        return self.wait(lambda state: s in state, timeout)
-
-    def wait_while(self, s, timeout=None):
-        """
-        Blocks until ``s`` is not in ``self.state``.  The condition is checked
-        when there is an I/O event related to the ``state`` attribute.  Exits
-        early when ``timeout`` (in milliseconds) is reached.
-
-        Returns ``True`` if the condition is met, and ``False`` if the timeout
-        is reached.
-
-        Example::
-
-            m.wait_while('running')
-        """
-        return self.wait(lambda state: s not in state, timeout)
+        return rC
 
     def _speed_native_units(self, speed, label=None):
-        speed = speed_to_speedvalue(speed, label)
+        # If speed is not a SpeedValue object we treat it as a percentage
+        speed = SpeedPercent(speed)
         return speed.to_native_units(self)
 
-    def _set_rel_position_degrees_and_speed_sp(self, degrees, speed):
-        degrees = degrees if speed >= 0 else -degrees
-        speed = abs(speed)
-
-        position_delta = int(round((degrees * self.count_per_rot) / 360))
-        speed_sp = int(round(speed))
-
-        self.position_sp = position_delta
-        self.speed_sp = speed_sp
-
-    def _set_brake(self, brake):
-        if brake:
-            self.stop_action = self.STOP_ACTION_HOLD
+    def __str__(self):
+        if 'address' in self.kwargs:
+            return "%s(%s)" % (self.__class__.__name__,
+                self.kwargs.get('address'))
         else:
-            self.stop_action = self.STOP_ACTION_COAST
+            return "A" + self.__class__.__name__
 
-    def on_for_rotations(self, speed, rotations, brake=True, block=True):
-        """
-        Rotate the motor at ``speed`` for ``rotations``
+    def __repr__(self):
+        return self.__str__()
 
-        ``speed`` can be a percentage or a :class:`ev3dev2.motor.SpeedValue`
-        object, enabling use of other units.
-        """
-        speed_sp = self._speed_native_units(speed)
-        self._set_rel_position_degrees_and_speed_sp(rotations * 360, speed_sp)
-        self._set_brake(brake)
-        self.run_to_rel_pos()
-
-        if block:
-            self.wait_until('running', timeout=WAIT_RUNNING_TIMEOUT)
-            self.wait_until_not_moving()
-
-    def on_for_degrees(self, speed, degrees, brake=True, block=True):
-        """
-        Rotate the motor at ``speed`` for ``degrees``
-
-        ``speed`` can be a percentage or a :class:`ev3dev2.motor.SpeedValue`
-        object, enabling use of other units.
-        """
-        speed_sp = self._speed_native_units(speed)
-        self._set_rel_position_degrees_and_speed_sp(degrees, speed_sp)
-        self._set_brake(brake)
-        self.run_to_rel_pos()
-
-        if block:
-            self.wait_until('running', timeout=WAIT_RUNNING_TIMEOUT)
-            self.wait_until_not_moving()
-
-    def on_to_position(self, speed, position, brake=True, block=True):
-        """
-        Rotate the motor at ``speed`` to ``position``
-
-        ``speed`` can be a percentage or a :class:`ev3dev2.motor.SpeedValue`
-        object, enabling use of other units.
-        """
-        speed = self._speed_native_units(speed)
-        self.speed_sp = int(round(speed))
-        self.position_sp = position
-        self._set_brake(brake)
-        self.run_to_abs_pos()
-
-        if block:
-            self.wait_until('running', timeout=WAIT_RUNNING_TIMEOUT)
-            self.wait_until_not_moving()
-
-    def on_for_seconds(self, speed, seconds, brake=True, block=True):
-        """
-        Rotate the motor at ``speed`` for ``seconds``
-
-        ``speed`` can be a percentage or a :class:`ev3dev2.motor.SpeedValue`
-        object, enabling use of other units.
-        """
-
-        if seconds < 0:
-            raise ValueError("seconds is negative ({})".format(seconds))
-
-        speed = self._speed_native_units(speed)
-        self.speed_sp = int(round(speed))
-        self.time_sp = int(seconds * 1000)
-        self._set_brake(brake)
-        self.run_timed()
-
-        if block:
-            self.wait_until('running', timeout=WAIT_RUNNING_TIMEOUT)
-            self.wait_until_not_moving()
-
-    def on(self, speed, brake=True, block=False):
-        """
-        Rotate the motor at ``speed`` for forever
-
-        ``speed`` can be a percentage or a :class:`ev3dev2.motor.SpeedValue`
-        object, enabling use of other units.
-
-        Note that ``block`` is False by default, this is different from the
-        other ``on_for_XYZ`` methods.
-        """
-        speed = self._speed_native_units(speed)
-        self.speed_sp = int(round(speed))
-        self._set_brake(brake)
-        self.run_forever()
-
-        if block:
-            self.wait_until('running', timeout=WAIT_RUNNING_TIMEOUT)
-            self.wait_until_not_moving()
-
-    def off(self, brake=True):
-        self._set_brake(brake)
-        self.stop()
-
-    @property
-    def rotations(self):
-        return float(self.position / self.count_per_rot)
-
-    @property
-    def degrees(self):
-        return self.rotations * 360
+    def reset_rotation_count(self):
+        emptyBuff = bytearray()
+        out = vrep.simxCallScriptFunction(
+            clientID,
+            'Funciones',
+            vrep.sim_scripttype_childscript,
+            'ResetRotationCount',
+            [self.int_motor], [], [], emptyBuff,
+            vrep.simx_opmode_oneshot_wait
+        )
+        returnCode, outInts, outFloats, outStrings, outBuffer = out
+        return returnCode
 
 
 class LargeMotor(Motor):
-    """
-    EV3/NXT large servo motor.
+    """Large Motor class"""
+    def __init__(self, address=None, **kwargs):
+        super(LargeMotor, self).__init__(address, **kwargs)
 
-    Same as :class:`Motor`, except it will only successfully initialize if it finds a "large" motor.
-    """
+    def reset(self):
+        return self.reset_rotation_count()
 
-    SYSTEM_CLASS_NAME = Motor.SYSTEM_CLASS_NAME
-    SYSTEM_DEVICE_NAME_CONVENTION = '*'
-    __slots__ = []
-
-    def __init__(self, address=None, name_pattern=SYSTEM_DEVICE_NAME_CONVENTION, name_exact=False, **kwargs):
-
-        super(LargeMotor, self).__init__(address,
-                                         name_pattern,
-                                         name_exact,
-                                         driver_name=['lego-ev3-l-motor', 'lego-nxt-motor'],
-                                         **kwargs)
-
-# follow gyro angle classes
-class FollowGyroAngleErrorTooFast(Exception):
-    """
-    Raised when a gyro following robot has been asked to follow
-    an angle at an unrealistic speed
-    """
-    pass
-
-
-# line follower classes
-class LineFollowErrorLostLine(Exception):
-    """
-    Raised when a line following robot has lost the line
-    """
-    pass
-
-
-class LineFollowErrorTooFast(Exception):
-    """
-    Raised when a line following robot has been asked to follow
-    a line at an unrealistic speed
-    """
-    pass
-
-
-# line follower functions
-def follow_for_forever(tank):
-    """
-    ``tank``: the MoveTank object that is following a line
-    """
-    return True
-
-
-def follow_for_ms(tank, ms):
-    """
-    ``tank``: the MoveTank object that is following a line
-    ``ms`` : the number of milliseconds to follow the line
-    """
-    if not hasattr(tank, 'stopwatch') or tank.stopwatch is None:
-        tank.stopwatch = StopWatch()
-        tank.stopwatch.start()
-
-    if tank.stopwatch.value_ms >= ms:
-        tank.stopwatch = None
-        return False
-    else:
-        return True
-
-
-##########
-### LM ###
-##########
 
 class MoveTank: #(LargeMotor):
     """
@@ -1242,7 +790,8 @@ class MoveTank: #(LargeMotor):
         MoveTank.on_for_degrees(self, left_speed, right_speed,
             rotations * 360, brake, block)
 
-    def on(self, speed):
+    def on(self, left_speed, right_speed,
+            brake=True, block=True):
         """
         motor (int): motor number
             1: 'B' or 'left'
@@ -1250,16 +799,215 @@ class MoveTank: #(LargeMotor):
             3: both
         speed (int/float): speed of motor, in [-MAX_SPEED, MAX_SPEED]
         """
-        speed = SpeedPercent(speed)
+        left_speed, right_speed = self._unpack_speeds_to_native_units(
+            left_speed, right_speed
+        )
 
+        emptyBuff = bytearray()
+        if left_speed == right_speed:
+            out = vrep.simxCallScriptFunction(
+                clientID,
+                'Funciones',
+                vrep.sim_scripttype_childscript,
+                'On',
+                [3, int(left_speed)], [left_speed], [], emptyBuff,
+                vrep.simx_opmode_oneshot_wait
+            )
+        else:
+            outL = vrep.simxCallScriptFunction(
+                clientID,
+                'Funciones',
+                vrep.sim_scripttype_childscript,
+                'On',
+                [1, int(left_speed)], [left_speed], [], emptyBuff,
+                vrep.simx_opmode_oneshot_wait
+            )
+            out = vrep.simxCallScriptFunction(
+                clientID,
+                'Funciones',
+                vrep.sim_scripttype_childscript,
+                'On',
+                [2, int(right_speed)], [right_speed], [], emptyBuff,
+                vrep.simx_opmode_oneshot_wait
+            )
+        returnCode, outInts, outFloats, outStrings, outBuffer = out
+        return returnCode
+
+    def off(motor):
+        "..."
         emptyBuff = bytearray()
         out = vrep.simxCallScriptFunction(
             clientID,
             'Funciones',
             vrep.sim_scripttype_childscript,
-            'On',
-            [3, int(speed)], [speed], [], emptyBuff,
+            'Off',
+            [3], [], [], emptyBuff,
             vrep.simx_opmode_oneshot_wait
         )
         returnCode, outInts, outFloats, outStrings, outBuffer = out
         return returnCode
+
+
+# -----------------------------------------------------------------------------
+# Define the base class from which all other ev3dev classes are defined.
+
+class Device(object):
+    """The ev3dev device base class"""
+
+    __slots__ = [
+        '_path',
+        '_device_index',
+        '_attr_cache',
+        'kwargs',
+    ]
+
+    # DEVICE_ROOT_PATH = '/sys/class'
+    # _DEVICE_INDEX = re.compile(r'^.*(\d+)$')
+    # to be implemented
+
+
+class Sensor(Device):
+    """
+    The sensor class provides a uniform interface for using most of the
+    sensors available for the EV3.
+    """
+
+    SYSTEM_CLASS_NAME = 'lego-sensor'
+    SYSTEM_DEVICE_NAME_CONVENTION = 'sensor*'
+    __slots__ = [
+    '_address',
+    '_command',
+    '_commands',
+    '_decimals',
+    '_driver_name',
+    '_mode',
+    '_modes',
+    '_num_values',
+    '_units',
+    '_value',
+    '_bin_data_format',
+    '_bin_data_size',
+    '_bin_data',
+    '_mode_scale'
+    ]
+
+    # TO BE implemented
+
+
+class GyroSensor(Sensor):
+    """
+    LEGO EV3 gyro sensor.
+    """
+
+    VREP_GYRO_NAME = 'Giroscopio'
+    # VREP_GYRO_NAME = 'GyroSensor_G'
+    # VREP_GYRO_NAME = 'GyroSensor_reference_G'
+    # VREP_GYRO_NAME = 'GyroSensor_VA'
+    # VREP_GYRO_NAME = 'GyroSensor_reference'
+
+    # vrep
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+        if "clientID" in self.kwargs:  # local preference
+            self.clientID = self.kwargs['clientID']
+        elif "clientID" in globals():  # global question
+            if VERBOSE:
+                print("global ID")
+            self.clientID = clientID
+            self.kwargs['clientID'] = clientID
+        else:
+            self.kwargs['clientID'] = connection(dummy=not True)
+            # print("Need clientID")
+            # sys.exit("No client")
+
+        if "gyroName" in self.kwargs:
+            self.VREP_GYRO_NAME = self.kwargs.get('gyroName')
+        else:
+            self.kwargs['gyroName'] = self.VREP_GYRO_NAME
+
+        # object handle
+        errorCode, self.gyro = vrep.simxGetObjectHandle(
+            self.kwargs.get('clientID'),
+            # GyroSensor.VREP_GYRO_NAME,
+            self.VREP_GYRO_NAME,
+            vrep.simx_opmode_oneshot_wait)
+
+        if VERBOSE:
+            print("GyroError, GyroCodeNr", errorCode, self.gyro)
+
+        self.connected = True
+        self.units = 'degrees'
+        self.mode = 'GYRO-ANG'  # or 'GYRO-RATE'
+
+    @property
+    def mode(self):
+        return self.__mode
+
+    @mode.setter
+    def mode(self, var):
+        if var in ['GYRO_ANG', 'GYRO_RATE']:
+            self.__mode = var
+        else:
+            self.__mode = 'GYRO_ANG'
+
+    def __str__(self):
+        return f"{self.gyro} in {self.mode} mode"
+
+    def __repr__(self):
+        return self.__str__()
+
+    def angle(self):
+        emptyBuff = bytearray()
+        out = vrep.simxCallScriptFunction(
+            clientID,
+            'Funciones',
+            vrep.sim_scripttype_childscript,
+            'SensorGyroA',
+            [], [], [], emptyBuff,
+            vrep.simx_opmode_oneshot_wait
+        )
+
+        returnCode, outInts, outFloats, outStrings, outBuffer = out
+        _angle = outInts[0]
+        return _angle
+
+    def angular_velocity(self):
+        emptyBuff = bytearray()
+        out = vrep.simxCallScriptFunction(
+            clientID,
+            'Funciones',
+            vrep.sim_scripttype_childscript,
+            'SensorGyroVA',
+            [], [], [], emptyBuff,
+            vrep.simx_opmode_oneshot_wait
+        )
+
+        returnCode, outInts, outFloats, outStrings, outBuffer = out
+        _angular_velocity = outInts[0]
+        return _angular_velocity
+
+    def value(self):
+        if self.mode == 'GYRO-RATE':
+            return self.angular_velocity()
+        else:  # 'GYRO-ANG':
+            return self.angle()
+
+    def velocity(self):
+        return self.angular_velocity()
+
+    def state(self):
+        return self.angle(), self.angular_velocity()
+
+
+
+# vrep simulation init
+# v0.1 - clientID will be global
+#
+# TODO: 1. move (maybe) to a function and call here...
+#       2. think of possible user specific clientID (in kwargs?)
+#       3. rewrite self.kwargs['arg'] to self.kwargs.get('arg')
+#       4. add __slots__ to Motor
+if __name__ == "__main__" and CONNECT:
+    vrep.simxFinish(-1)
+    clientID = connection()

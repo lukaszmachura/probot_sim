@@ -49,3 +49,29 @@ class Sensor(Device):
         '_address', '_command', '_commands', '_decimals', '_driver_name', '_mode', '_modes', '_num_values', '_units',
         '_value', '_bin_data_format', '_bin_data_size', '_bin_data', '_mode_scale'
     ]
+
+    def __init__(self, address=None, name_pattern=SYSTEM_DEVICE_NAME_CONVENTION, name_exact=False, **kwargs):
+
+        if address is not None:
+            kwargs['address'] = address
+        super(Sensor, self).__init__(self.SYSTEM_CLASS_NAME, name_pattern, name_exact, **kwargs)
+
+        self._address = None
+        self._command = None
+        self._commands = None
+        self._decimals = None
+        self._driver_name = None
+        self._mode = None
+        self._modes = None
+        self._num_values = None
+        self._units = None
+        self._value = [None, None, None, None, None, None, None, None]
+
+        self._bin_data_format = None
+        self._bin_data_size = None
+        self._bin_data = None
+        self._mode_scale = {}
+
+    def _ensure_mode(self, mode):
+        if self.mode != mode:
+            self.mode = mode
