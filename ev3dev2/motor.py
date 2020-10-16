@@ -707,6 +707,21 @@ class MoveTank: #(LargeMotor):
 
         MotorSet.__init__(self, motor_specs, desc)
 
+    def follow_line(self):
+        raise NotImplementedError
+
+    def follow_gyro_angle(self):
+        raise NotImplementedError
+
+    def turn_degrees(self):
+        raise NotImplementedError
+
+    def turn_right(self):
+        raise NotImplementedError
+
+    def turn_left(self):
+        raise NotImplementedError
+
     def _unpack_speeds_to_native_units(self, left_speed, right_speed):
         left_speed = self.motors['Left motor port']._speed_native_units(
             left_speed, "left_speed")
@@ -718,67 +733,52 @@ class MoveTank: #(LargeMotor):
             right_speed
         )
 
-    def on_for_degrees(self,
-            left_speed, right_speed, degrees,
-            brake=True, block=True):
+    def get_rotation_count(self, motor):
+        "..."
+        if 'B' in motor:
+            fun = 'MotorRotationCountB'
+        elif 'C' in motor:
+            fun = 'MotorRotationCountC'
+        else:
+            raise ValueError('motor = C or B')
 
-        if brake is not True:
-            print(f'{__class__.__name__} break not implemented')
-
-        if block is not True:
-            print(f'{__class__.__name__} block not implemented')
-
-        # deg to rad
-        if degrees == 'full':
-            degrees = 360
-        if degrees == 'half':
-            degrees = 180
-        if degrees == 'right':
-            degrees = 90
-        rad = degrees * math.pi / 180
-
-        _clientID = self.motors['Left motor port'].kwargs['clientID']
-        _left_motor = self.motors['Left motor port']
-        _right_motor = self.motors['Right motor port']
-
-        left_speed, right_speed = self._unpack_speeds_to_native_units(
-            left_speed, right_speed
+        emptyBuff = bytearray()
+        out = vrep.simxCallScriptFunction(
+            clientID,
+            'Funciones',
+            vrep.sim_scripttype_childscript,
+            fun,
+            [], [], [], emptyBuff,
+            vrep.simx_opmode_oneshot_wait
         )
+        returnCode, outInts, outFloats, outStrings, outBuffer = out
+        return outInts[0]
 
-        rCL, ini_pos_L = _left_motor.initialize_motor()
-        rCR, ini_pos_R = _right_motor.initialize_motor()
-        if VERBOSE:
-            print(ini_pos_L, ini_pos_R)
+    def reset_rotation_count(self, motor):
+        """
+        motor: motor number
+            1: 'B' or 'left'
+            2: 'C' or 'right'
+        """
+        if ('B' in motor) or (motor == 1):
+            motor_idx = 1
+        elif ('C' in motor) or (motor == 2):
+            motor_idx = 2
 
-        pos_L, pos_R = ini_pos_L, ini_pos_R
-        while ((abs(pos_L - ini_pos_L) <= rad)
-            and (abs(pos_R - ini_pos_R) <= rad)):
+        emptyBuff = bytearray()
+        out = vrep.simxCallScriptFunction(
+            clientID,
+            'Funciones',
+            vrep.sim_scripttype_childscript,
+            'ResetRotationCount',
+            [motor_idx], [], [], emptyBuff,
+            vrep.simx_opmode_oneshot_wait
+        )
+        returnCode, outInts, outFloats, outStrings, outBuffer = out
+        return returnCode
 
-            err_vL = vrep.simxSetJointTargetVelocity(
-                _clientID, _left_motor.kwargs.get('motor'), left_speed,
-                vrep.simx_opmode_oneshot_wait
-            )
-            err_vR = vrep.simxSetJointTargetVelocity(
-                _clientID, _right_motor.kwargs.get('motor'), right_speed,
-                vrep.simx_opmode_oneshot_wait
-            )
-
-            rC, pos_L = vrep.simxGetJointPosition(
-                _clientID,
-                _left_motor.kwargs.get('motor'),
-                vrep.simx_opmode_streaming)
-            rC, pos_R = vrep.simxGetJointPosition(
-                _clientID,
-                _right_motor.kwargs.get('motor'),
-                vrep.simx_opmode_streaming)
-            if VERBOSE:
-                print(pos_L - ini_pos_L, pos_R - ini_pos_R)
-
-        self.motors['Left motor port'].full_stop()
-        self.motors['Right motor port'].full_stop()
-
-    def on_for_rotations(self, left_speed, right_speed,
-                         rotations, brake=True, block=True):
+    def on_for_degrees(self, left_speed, right_speed,
+                         degrees, brake=True, block=True):
         """
         Rotate the motors at 'left_speed & right_speed' for 'rotations'. Speeds
         can be percentages or any SpeedValue implementation.
@@ -787,8 +787,99 @@ class MoveTank: #(LargeMotor):
         ``rotations`` while the motor on the inside will have its requested
         distance calculated according to the expected turn.
         """
+        if left_speed > right_speed:
+            relevant_motor = "B"
+        else: # left_speed <= right_speed:
+            relevant_motor = "C"
+
+        self.reset_rotation_count(relevant_motor)
+        rc = self.get_rotation_count(relevant_motor)
+        if VERBOSE: print(f"rc{rc}, deg{degrees}")
+        MoveTank.on(self, left_speed, right_speed, brake, block)
+        while rc < degrees:
+            rc = self.get_rotation_count(relevant_motor)
+            if VERBOSE: print(f"rc{rc}, deg{degrees}")
+        MoveTank.off(self)
+
+    def on_for_rotations(self,
+            left_speed, right_speed, rotations,
+            brake=True, block=True):
         MoveTank.on_for_degrees(self, left_speed, right_speed,
             rotations * 360, brake, block)
+
+    # def on_for_degrees_direct_vrep(self,
+    #         left_speed, right_speed, degrees,
+    #         brake=True, block=True):
+    #     pass
+    #
+    #     if brake is not True:
+    #         print(f'{__class__.__name__} break not implemented')
+    #
+    #     if block is not True:
+    #         print(f'{__class__.__name__} block not implemented')
+    #
+    #     # deg to rad
+    #     if degrees == 'full':
+    #         degrees = 360
+    #     if degrees == 'half':
+    #         degrees = 180
+    #     if degrees == 'right':
+    #         degrees = 90
+    #     rad = degrees * math.pi / 180
+    #
+    #     _clientID = self.motors['Left motor port'].kwargs['clientID']
+    #     _left_motor = self.motors['Left motor port']
+    #     _right_motor = self.motors['Right motor port']
+    #
+    #     left_speed, right_speed = self._unpack_speeds_to_native_units(
+    #         left_speed, right_speed
+    #     )
+    #
+    #     rCL, ini_pos_L = _left_motor.initialize_motor()
+    #     rCR, ini_pos_R = _right_motor.initialize_motor()
+    #     if VERBOSE:
+    #         print(ini_pos_L, ini_pos_R)
+    #
+    #     pos_L, pos_R = ini_pos_L, ini_pos_R
+    #     while ((abs(pos_L - ini_pos_L) <= rad)
+    #         and (abs(pos_R - ini_pos_R) <= rad)):
+    #
+    #         err_vL = vrep.simxSetJointTargetVelocity(
+    #             _clientID, _left_motor.kwargs.get('motor'), left_speed,
+    #             vrep.simx_opmode_oneshot_wait
+    #         )
+    #         err_vR = vrep.simxSetJointTargetVelocity(
+    #             _clientID, _right_motor.kwargs.get('motor'), right_speed,
+    #             vrep.simx_opmode_oneshot_wait
+    #         )
+    #
+    #         rC, pos_L = vrep.simxGetJointPosition(
+    #             _clientID,
+    #             _left_motor.kwargs.get('motor'),
+    #             vrep.simx_opmode_streaming)
+    #         rC, pos_R = vrep.simxGetJointPosition(
+    #             _clientID,
+    #             _right_motor.kwargs.get('motor'),
+    #             vrep.simx_opmode_streaming)
+    #         if VERBOSE:
+    #             print(pos_L - ini_pos_L, pos_R - ini_pos_R)
+    #
+    #     self.motors['Left motor port'].full_stop()
+    #     self.motors['Right motor port'].full_stop()
+    #
+    # def on_for_rotations_vrep(self, left_speed, right_speed,
+    #                      rotations, brake=True, block=True):
+    #     """
+    #     Rotate the motors at 'left_speed & right_speed' for 'rotations'. Speeds
+    #     can be percentages or any SpeedValue implementation.
+    #     If the left speed is not equal to the right speed (i.e., the robot will
+    #     turn), the motor on the outside of the turn will rotate for the full
+    #     ``rotations`` while the motor on the inside will have its requested
+    #     distance calculated according to the expected turn.
+    #     """
+    #     pass
+    #     MoveTank.on_for_degrees(self, left_speed, right_speed,
+    #         rotations * 360, brake, block)
 
     def on(self, left_speed, right_speed,
             brake=True, block=True):
