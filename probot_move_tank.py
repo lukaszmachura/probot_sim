@@ -13,6 +13,7 @@ angle = g.value()
 print(angle)
 
 # tank_pair.on(20, -20)
+tank_pair.on_for_rotations(20, 20, 1)
 tank_pair.on_for_rotations(20, -20, 1)
 
 t = time()
