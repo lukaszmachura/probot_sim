@@ -111,6 +111,31 @@ ResetRotationCount=function(inInts,inFloats,inStrings,inBuffer)
     return {},{},{},''
 end
 
+
+
+--Returns the information of the touch sensor
+SensorTouch = function (inInts, inFloats, inStrings, inBuffer)
+     if (finish ~ = 1) then -- finish parameter
+     local res - result variable
+         local state, forceVector = sim.readForceSensor (bumper) -- sensor data is read
+         -- and the state and the
+         -- force vector
+     if (state> 0) then - if it has detected a click
+             if ((forceVector [3]> 1)) then - we check if a force of more than
+ -- 1N and we will return as result 1
+                 res = 1;
+             else - otherwise we will return 0
+                 res = 0;
+             end
+         else - otherwise we will return 0
+             res = 0;
+         end
+return {res}, {}, {}, '' - the result is returned
+     else
+         return {}, {}, {}, ''
+     end
+end
+
 --Devuelve la informacion del sensor tactil
 SensorTouch=function(inInts,inFloats,inStrings,inBuffer)
     if(finish ~= 1) then -- parÃ¡metro finish
@@ -202,7 +227,7 @@ ResetGyroA=function(inInts,inFloats,inStrings,inBuffer)
         return {},{},{},''
 end
 
--- FUNCIONES DE LA INTERFAZ
+-- INTERFACE FUNCTIONS
 
 --AÃ±ade un texto en pantalla dependiendo de la linea indicada
 TextOut=function(inInts,inFloats,inStrings,inBuffer)
