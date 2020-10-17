@@ -42,3 +42,8 @@ Note that you need specific remote API library: "remoteApi.dll" (Windows), "remo
 * probot_regular_polygon_gyro.py
 * probot_regular_polygon_v02.py
 * probot_ultrasonic_sensor.py
+
+
+TODO:
+* Buttons
+* ForceSensor (TouchSensor)
