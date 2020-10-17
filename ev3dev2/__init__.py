@@ -55,7 +55,7 @@ api_return_codes = {
     64: 'simx_return_initialize_error_flag; simxStart was not yet called'
 }
 
-CONNECT = not True
+CONNECT = True
 VERBOSE = not True
 if VERBOSE:
     print("vrep imported")
