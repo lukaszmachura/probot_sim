@@ -118,7 +118,7 @@ class Display(object):
         Applies pending changes to the screen.
         Nothing will be drawn on the screen until this function is called.
         """
-        raise NotImplementedError)
+        raise NotImplementedError
 
     def image_filename(self, filename, clear_screen=True, x1=0, y1=0, x2=None, y2=None):
         raise NotImplementedError
