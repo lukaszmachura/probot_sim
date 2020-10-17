@@ -34,8 +34,10 @@ def clear_screen():
     return returnCode
 
 for line in range(1, 9):
-    write_line_on_display(line, f"probot nr {line}")
+    write_line_on_display(line, f"w" * 19)
+#
+# sleep(1)
+#
+# clear_screen()
 
-sleep(1)
-
-clear_screen()
+# write_line_on_display(1, "x" * 30)
