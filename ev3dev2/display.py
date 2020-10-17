@@ -23,6 +23,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 # -----------------------------------------------------------------------------
+import vrep
+from ev3dev2 import *
 
 class Display(object):
     """
@@ -37,9 +39,23 @@ class Display(object):
     GRID_ROWS = 8
     GRID_ROW_PIXELS = None
 
-    def __init__(self, desc='Display'):
+    def __init__(self, desc='Display', **kwargs):
+        self.kwargs = kwargs
+
         self.platform = "ev3sim"
         self.desc = desc
+
+        if "clientID" in self.kwargs:  # local preference
+            self.clientID = self.kwargs['clientID']
+        elif "clientID" in globals():  # global question
+            if VERBOSE:
+                print("global ID")
+            self.clientID = clientID
+            self.kwargs['clientID'] = clientID
+        else:
+            self.kwargs['clientID'] = connection(dummy=not True)
+
+        self.connected = True
 
     def __str__(self):
         return self.desc
@@ -188,14 +204,38 @@ class Display(object):
         if clear_screen:
             self.clear()
 
-        if VERBOSE and (len(text) + x > Display.GRID_COLUMNS):
+        if VERBOSE:
+            maks_letters = Display.GRID_COLUMNS * Display.GRID_ROWS
+            requested_letters = len(text) + x + y * Display.GRID_COLUMNS
+            if requested_letters > maks_letters:
+                print('Not enough space on display')
                 print('Your text will not be visible')
 
-        display_text = " " * x + str(text)
-        returnCode = self._write_line_on_display(y, display_text)
+        display_text = " " * y * Display.GRID_COLUMNS
+        display_text += " " * x
+        display_text += str(text)
+        print(display_text)
+
+        display_list = []
+        _txt = ""
+        for char_idx in range(len(display_text)):
+            _txt += display_text[char_idx]
+            if (char_idx + 1) % Display.GRID_COLUMNS == 0:
+                display_list.append(_txt)
+                _txt = ""
+        display_list.append(_txt)
+
+        print(display_list)
+
+        rows_no = min(len(display_list), Display.GRID_ROWS)
+        for line_number in range(rows_no):
+            print(x, y, line_number ,
+                            display_list[line_number])
+            returnCode = self.write_line_on_display(line_number + 1,
+                            display_list[line_number])
         return returnCode
 
-    def _write_line_on_display(self, line_number, text):
+    def write_line_on_display(self, line_number, text):
         out = vrep.simxCallScriptFunction(
             clientID,
             'Funciones',
