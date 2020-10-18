@@ -1,7 +1,6 @@
-'''
-
-'''
-
+###################################
+### load probot_empty.ttt scene ###
+###################################
 import ev3dev.sim as ev3
 
 # initialize tank mode

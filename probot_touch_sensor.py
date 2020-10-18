@@ -1,13 +1,10 @@
-# Create a program to make the robot move straight and then turn 90 degrees.
-# Import of necessary libraries
+#######################################
+### load probot_detection.ttt scene ###
+#######################################
 from ev3dev2.motor import MoveTank, OUTPUT_B, OUTPUT_C
 from ev3dev2.sensor.lego import GyroSensor, TouchSensor
 from ev3dev2.display import Display
 from ev3dev2.led import Leds
-
-####
-# load probot_detection.ttt scene
-#
 
 # Connect two large motors to port B and port C
 tank_pair = MoveTank(OUTPUT_B, OUTPUT_C)

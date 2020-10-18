@@ -1,3 +1,6 @@
+###################################
+### load probot_empty.ttt scene ###
+###################################
 from ev3dev2.led import Leds
 from ev3dev2.display import Display
 from time import sleep

@@ -1,9 +1,11 @@
+###################################
+### load probot_empty.ttt scene ###
+###################################
 import ev3dev.sim as ev3
 
-ev3.VERBOSE = not True
-# ev3.restart_simulation()
 
 tank = ev3.MoveTank("Motor_B", "Motor_C")
+
 if ev3.VERBOSE:
     print(f"Tank: {tank}")
 
