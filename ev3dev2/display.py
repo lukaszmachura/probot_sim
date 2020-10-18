@@ -214,7 +214,6 @@ class Display(object):
         display_text = " " * y * Display.GRID_COLUMNS
         display_text += " " * x
         display_text += str(text)
-        print(display_text)
 
         display_list = []
         _txt = ""
@@ -225,12 +224,8 @@ class Display(object):
                 _txt = ""
         display_list.append(_txt)
 
-        print(display_list)
-
         rows_no = min(len(display_list), Display.GRID_ROWS)
         for line_number in range(rows_no):
-            print(x, y, line_number ,
-                            display_list[line_number])
             returnCode = self.write_line_on_display(line_number + 1,
                             display_list[line_number])
         return returnCode
