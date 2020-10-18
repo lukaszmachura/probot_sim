@@ -34,6 +34,7 @@ Note that you need specific remote API library: "remoteApi.dll" (Windows), "remo
 7. Open "probot_square.ttt" scene (File->Open scene).
 
 8. Run your Python code. You can start from one of the provided examples:
+* probot_button.py
 * probot_color_calibrate_white.py
 * probot_color_sensor.py
 * probot_display.py
@@ -42,7 +43,7 @@ Note that you need specific remote API library: "remoteApi.dll" (Windows), "remo
 * probot_move_tank.py
 * probot_regular_polygon.py
 * probot_regular_polygon_gyro.py
-* probot_regular_polygon_v02.py
+* probot_regular_polygon_ev3dev.py
 * probot_touch_sensor.py
 * probot_ultrasonic_sensor.py
 
