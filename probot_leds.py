@@ -5,6 +5,10 @@ from time import sleep
 leds = Leds()
 display = Display()
 
+leds.all_off()
+display.clear()
+sleep(2)
+
 display.text_grid("POLICE!!!", y=3, x=9)
 
 for i in range(10):

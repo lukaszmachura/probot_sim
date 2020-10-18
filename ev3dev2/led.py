@@ -84,7 +84,7 @@ class Leds(Led):
 
             group (str): 'LEFT', 'RIGHT', 'BOTH'
 
-            color (str): None (default), 'RED', 'GREEN', 'AMBER', 'GREY'
+            color (str): 'RED', 'GREEN', 'AMBER', 'GREY'
             color (tuple/list): rgb
 
         Example::
@@ -99,8 +99,9 @@ class Leds(Led):
             # print('not self.leds')
             return
 
-        color_tuple = self.led_colors[None]
+        color_tuple = self.led_colors['GREY']
         if isinstance(color, str):
+            color = color.upper()
             assert color in self.led_colors, \
                 "%s is an invalid LED color, valid choices are %s" % \
                 (color, ', '.join(self.led_colors.keys()))
@@ -148,7 +149,7 @@ class Leds(Led):
         """
         Turn all LEDs off
         """
-        self.set_color('BOTH', None)
+        self.set_color('BOTH', 'GREY')
 
     def reset(self):
         """
