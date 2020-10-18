@@ -43,7 +43,15 @@ INPUT_4 = 'in4'
 BUTTONS_FILENAME = None
 EVDEV_DEVICE_NAME = None
 
-LEDS = {}
-LED_GROUPS = {}
-LED_COLORS = {}
-LED_DEFAULT_COLOR = ''
+LEDS = 'StatusLight'
+LED_GROUPS = {'LEFT': 'L', 'RIGHT': 'R', 'BOTH': 'B'}
+NAMED_COLORS = {'GREEN': (0, 1, 0),
+                'AMBER': (0.89, 0.54, 0.23),
+                'RED': (1, 0, 0),
+                'GREY': (0.85, 0.85, 0.85)}
+LED_COLORS = {None: NAMED_COLORS['GREY'],
+              'GREEN': NAMED_COLORS['GREEN'],
+              'AMBER': NAMED_COLORS['AMBER'],
+              'RED': NAMED_COLORS['RED'],
+              'GREY': NAMED_COLORS['GREY']}
+LED_DEFAULT_COLOR = None

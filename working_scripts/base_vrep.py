@@ -67,6 +67,38 @@ for name in [
 ###
 # below functions should help bulid around sensors
 
+def write_line_on_display(line_number, text):
+    assert 0 < line_number < 9
+    fun = 'TextOut'
+    emptyBuff = bytearray()
+    out = vrep.simxCallScriptFunction(
+        clientID,
+        'Funciones',
+        vrep.sim_scripttype_childscript,
+        fun,
+        [line_number], [], [text], emptyBuff,
+        vrep.simx_opmode_oneshot_wait
+    )
+
+    returnCode, outInts, outFloats, outStrings, outBuffer = out
+    return returnCode
+
+
+def clear_screen():
+    fun = 'ClearScreen'
+    emptyBuff = bytearray()
+    out = vrep.simxCallScriptFunction(
+        clientID,
+        'Funciones',
+        vrep.sim_scripttype_childscript,
+        fun,
+        [], [], [], emptyBuff,
+        vrep.simx_opmode_oneshot_wait
+    )
+
+    returnCode, outInts, outFloats, outStrings, outBuffer = out
+    return returnCode
+
 
 def get_rotation(motor):
     "..."
