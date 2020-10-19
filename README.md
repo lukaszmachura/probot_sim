@@ -31,7 +31,10 @@ Note that you need specific remote API library: "remoteApi.dll" (Windows), "remo
 
 6. Run vrep.
 
-7. Open "probot_NAME.ttt" scene (File->Open scene).
+7. Open scene (File->Open scene)
+* probot_color_sensor.ttt
+* probot_empty.ttt
+* probot_detection.ttt
 
 8. Run your Python code. You can start from one of the provided examples:
 * **empty scene**
@@ -49,10 +52,3 @@ Note that you need specific remote API library: "remoteApi.dll" (Windows), "remo
 * **color**
   * probot_color_calibrate_white.py
   * probot_color_sensor.py
-
-
-
-
-TODO:
-* Buttons
-* ForceSensor (TouchSensor)
