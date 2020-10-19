@@ -22,8 +22,6 @@ vrep.py
 vrepConst.py
 to main probot_sim directory (or any other where you are going to code)
 
-*Note: if you will use this repo and your system is 64Bit, you can skip point 5*
-
 5. Copy
 [vrep dir]/programming/remoteApiBindings/lib/lib
 to main probot_sim directory (or any other where you are going to code).
