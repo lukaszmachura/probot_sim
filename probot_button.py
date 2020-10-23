@@ -27,7 +27,10 @@ while time() - t < 1:
 # works with numbers
 if button.wait_for_pressed(6):
     print("6 pressed")
+    display.text_grid("6 pressed")
+    leds.set_color('RIGHT', (0, 0, 1))
 
 # and names
 if button.wait_for_pressed('up'):
     print('up pressed')
+    display.text_grid("up pressed")

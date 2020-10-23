@@ -12,17 +12,18 @@ gy = GyroSensor()
 # Set mode of gyro sensor
 gy.mode = 'GYRO-ANG'
 
-for step in range(4):
+N = 18
+for step in range(N):
     # read the value from gyro sensor
     start_angle = gy.value()
     angle = start_angle
     print(angle, start_angle)
 
     # move 2 full wheel rotations forward
-    tank_pair.on_for_rotations(20, 20, 2)
+    tank_pair.on_for_rotations(20, 20, 1)
 
     # do the loop while condition is true
-    while abs(angle - start_angle) < 90 :
+    while abs(angle - start_angle) < 360 / N:
         angle = gy.value()
         # you can see the results on the screen
         print(angle, abs(angle - start_angle))
